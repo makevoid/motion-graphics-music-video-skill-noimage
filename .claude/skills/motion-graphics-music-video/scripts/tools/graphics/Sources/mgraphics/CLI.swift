@@ -7,6 +7,7 @@ struct Options {
     var scene: String, out = "", width = 1920, height = 1080, frames = 1, fps = 24.0
     var only: [Int]?, data: [String:String] = [:], plate: String?, audio: String?
     var codec = VideoCodec.h264, benchmark = false, software = false, measureCoverage = false, supersample = 1, bitrate: Int?
+    var from = 0, to: Int?
     init(_ arguments: [String]) throws {
         guard let first = arguments.first, !first.hasPrefix("--") else { throw GraphicsError.invalid("First argument must be a scene.json path; use --help") }; scene = first
         var i = 1
@@ -32,12 +33,15 @@ struct Options {
             case "--audio": audio = value
             case "--supersample": supersample = try integer(); guard (1...4).contains(supersample) else { throw GraphicsError.invalid("--supersample must be 1...4") }
             case "--bitrate": bitrate = try integer()
+            case "--from": from = try integer()
+            case "--to": to = try integer()
             case "--codec": guard let c = VideoCodec(rawValue:value) else { throw GraphicsError.invalid("Codec must be h264, hevc or prores4444") }; codec = c
             default: throw GraphicsError.invalid("Unknown option \(key)")
             }
         }
         guard (1...16384).contains(width), (1...16384).contains(height), frames > 0, fps.isFinite, fps > 0, fps <= 240 else { throw GraphicsError.invalid("Invalid dimensions, frame count, or fps") }
         guard !out.isEmpty || benchmark else { throw GraphicsError.invalid("--out is required") }
+        guard from >= 0, from < (to ?? frames), (to ?? frames) <= frames else { throw GraphicsError.invalid("--from/--to must satisfy 0 <= from < to <= frames") }
         if let only { guard !only.isEmpty, Set(only).count == only.count, only.allSatisfy({ $0 >= 0 && $0 < frames }) else { throw GraphicsError.invalid("--only requires distinct indices inside the frame range") } }
     }
 }
@@ -53,6 +57,7 @@ struct Options {
               --codec h264|hevc|prores4444  ProRes 4444 .mov preserves alpha; MP4 flattens over black
               --supersample 2           Draw at 2x (or 3, 4) and Lanczos-downscale: cleaner thin lines, glows and small type
               --bitrate 15000000        Average H.264/HEVC bits/s (default 0.18 bit/pixel/frame)
+              --from 0 --to N           Render only frames from..<to (a chunk; times stay absolute) — for parallel renders
               --benchmark              Render without writing; reports wall time and fps
               --software               Force software Core Image (Metal particles still require GPU)
               --analyze audio.wav --out features.json [--fps 24]  Native RMS/peak/spectrum analysis
@@ -118,12 +123,12 @@ struct Options {
         if !o.benchmark { try FileManager.default.createDirectory(at:movie ? out.deletingLastPathComponent() : out,withIntermediateDirectories:true) }
         if movie && !o.benchmark && FileManager.default.fileExists(atPath:out.path) { throw GraphicsError.io("Output already exists: \(out.path)") }
         let audioSource: AudioSource?
-        if movie && !o.benchmark, let audio { audioSource = try await AudioSource(url:URL(fileURLWithPath:audio),duration:Double(o.frames)/o.fps) }
+        if movie && !o.benchmark, let audio { audioSource = try await AudioSource(url:URL(fileURLWithPath:audio),start:Double(o.from)/o.fps,duration:Double((o.to ?? o.frames)-o.from)/o.fps) }
         else { audioSource = nil }
         let writer = movie && !o.benchmark ? try VideoWriter(url:out,width:o.width,height:o.height,fps:o.fps,codec:o.codec,audio:audioSource,bitrate:o.bitrate) : nil
         var coverage: [String:Double] = [:]
         let reviewCanvas = o.measureCoverage ? try Canvas(width:o.width,height:o.height) : nil
-        let frames = o.only?.sorted() ?? Array(0..<o.frames), start = ProcessInfo.processInfo.systemUptime
+        let frames = o.only?.sorted() ?? Array(o.from..<(o.to ?? o.frames)), start = ProcessInfo.processInfo.systemUptime
         for frame in frames {
             let time = FrameTime(frame:frame,fps:o.fps)
             let image: CIImage = try autoreleasepool {
@@ -153,7 +158,7 @@ struct Options {
                 }
                 return image
             }
-            if let writer { try await writer.append(image,frame:frame,compositor:compositor) }
+            if let writer { try await writer.append(image,frame:frame-o.from,compositor:compositor) }
         }
         if let writer { try await writer.finish() }
         let elapsed = ProcessInfo.processInfo.systemUptime-start

@@ -75,10 +75,11 @@ public final class AudioSource {
     func append(through seconds: Double) async throws {
         guard !finished else { return }
         while let sample = next, (CMSampleBufferGetPresentationTimeStamp(sample)-offset).seconds <= seconds {
-            let deadline = Date().addingTimeInterval(30)
+            // No wall-clock timeout: the writer holds audio back until the picture catches up (about a second of media), and a
+            // slow render (60 fps, supersampled) can take minutes per second of video. The writer cancels this task if it fails.
             while !input.isReadyForMoreMediaData {
-                guard Date() < deadline else { throw GraphicsError.io("Audio encoder backpressure timed out") }
-                try await Task.sleep(nanoseconds:1_000_000)
+                try Task.checkCancellation()
+                try await Task.sleep(nanoseconds:2_000_000)
             }
             var shifted: CMSampleBuffer = sample
             if offset != .zero {
@@ -143,7 +144,7 @@ public final class VideoWriter {
         guard !finished, frame == lastFrame+1 else { throw GraphicsError.invalid("Video frames must be contiguous starting at zero") }
         let deadline = Date().addingTimeInterval(30)
         while !input.isReadyForMoreMediaData {
-            if writer.status == .failed || writer.status == .cancelled { throw writer.error ?? GraphicsError.io("Encoder stopped") }
+            if writer.status == .failed || writer.status == .cancelled { audioTask?.cancel(); throw writer.error ?? GraphicsError.io("Encoder stopped") }
             guard Date() < deadline else { throw GraphicsError.io("Encoder backpressure timed out at frame \(frame)") }
             try await Task.sleep(nanoseconds:1_000_000)
         }

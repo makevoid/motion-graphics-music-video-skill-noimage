@@ -1,6 +1,7 @@
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import Foundation
+import MotionGraphics
 
 // The effect chain for one frame. Every active cue adds to a State (how much zoom, blur, glow… this frame), then the frame goes
 // through the Core Image filters once, in a fixed order: camera (punch/zoom/shake/whip) -> blurs (zoom, motion, edge) -> light
@@ -19,6 +20,11 @@ import Foundation
 //   rgb       hit    amt 0.006 (radial split, fraction of the frame), radius 0 (sideways R/B split, px)
 //   glitch    span   amt 1.0, fade 1: slices shoved sideways, RGB split, noise bars, flickering frame to frame
 //   tv        span   amt 1.0, fade 6, grain 0.09 (0 = none): scanlines, grain, soft focus, colour fade, vignette, rolling bar, line jitter
+//   shockwave hit    amt 1, x 0.5, y 0.5, radius 0.6 (final ring radius, fraction of the diagonal): Metal refraction ring
+//   lens      hit    amt 0.12 (barrel), size 0.2 (RGB dispersion), x/y centre: Metal lens kick with vignette
+//   heat      span   amt 5 (px), radius 0 (soft disc, fraction of the height; 0 = whole frame), x/y: Metal heat shimmer
+//   streaks   span   amt 1, radius 0.24 (streak length, fraction of the height), angle 0, size 0.35 (linear threshold):
+//                    Metal anamorphic flares from highlights (neon lines)
 //   bands     span   amt 1.0, n 3 (bands), size 0.07 (band height, fraction of the frame), fade 4: VHS tracking bands rolling down —
 //                    strips shoved sideways with an RGB split, a lift and a bright edge
 //   grain     span   amt 0.25, fade 6: film grain on its own (soft-light, so flat paper takes less of it than midtones)
@@ -29,6 +35,12 @@ final class Effects {
     let extent: CGRect, fps: Double
     var w: CGFloat { extent.width }
     var h: CGFloat { extent.height }
+
+    /// Metal kernels (Shaders.swift); compiled on first use, so cue files without shader cues never touch them.
+    private lazy var shader: MetalShader? = {
+        do { return try MetalShader(width: Int(w), height: Int(h), source: Shaders.source, functions: Shaders.functions) }
+        catch { FileHandle.standardError.write(Data("mvfx: Metal shaders unavailable (\(error)); shader cues skipped\n".utf8)); return nil }
+    }()
 
     init(width: Int, height: Int, fps: Double = 24) {
         extent = CGRect(x: 0, y: 0, width: width, height: height)
@@ -43,6 +55,7 @@ final class Effects {
         var dark = 0.0, rgb = 0.0, glitch = 0.0, tv = 0.0, tvGrain = 0.09, grain = 0.0
         var stretch = 0.0, stretchAngle = 0.0, echo = 0.0, echoTaps = 4, echoStep = 1
         var rgbShift = 0.0, bands = 0.0, bandCount = 3, bandSize = 0.07, bandSeed = 0
+        var warps: [(String, [Float])] = [], streaks: [Float]? // Metal passes: distortions after the camera, streaks after the lights
         var seed = 0
     }
 
@@ -117,6 +130,19 @@ final class Effects {
                 let e = c.env(u, curve: 2)
                 s.rgb += (c.amt ?? 0.006) * e
                 s.rgbShift += (c.radius ?? 0) * e
+            case "shockwave":
+                guard u >= Double(c.f) else { break }
+                let p = min(1, (u - Double(c.f) + 1) / Double(max(c.dur, 1)))
+                s.warps.append(("shockwave", shaderParams(u, amount: c.amt ?? 1, c, radius: c.radius ?? 0.6, progress: p, k0: 0, k1: 0)))
+            case "lens":
+                let e = c.env(u, curve: 1.6)
+                if e > 0.002 { s.warps.append(("lens", shaderParams(u, amount: (c.amt ?? 0.12) * e, c, radius: 0, progress: e, k0: c.size ?? 0.2, k1: 0.45 * e))) }
+            case "heat":
+                let e = c.env(u, defaultShape: "span")
+                if e > 0.002 { s.warps.append(("heat", shaderParams(u, amount: (c.amt ?? 5) * e, c, radius: (c.radius ?? 0) * Double(h), progress: e, k0: 0, k1: 0))) }
+            case "streaks":
+                let e = c.env(u, defaultShape: "span")
+                if e > 0.002 { s.streaks = shaderParams(u, amount: (c.amt ?? 1) * e, c, radius: (c.radius ?? 0.24) * Double(h), progress: e, k0: c.size ?? 0.35, k1: 0) }
             case "bands":
                 let e = (c.amt ?? 1) * c.env(u, defaultShape: "span")
                 if e > s.bands { s.bands = e; s.bandCount = max(1, min(c.n ?? 3, 12)); s.bandSize = c.size ?? 0.07; s.bandSeed = c.seed ?? c.f }
@@ -150,6 +176,11 @@ final class Effects {
     }
 
     /// Frames the echo cue at `frame` reads (earlier source frames), so the caller can keep or decode them.
+    private func shaderParams(_ u: Double, amount: Double, _ c: Cue, radius: Double, progress: Double, k0: Double, k1: Double) -> [Float] {
+        [Float(w), Float(h), Float(u / 24), Float(amount), Float((c.x ?? 0.5) * Double(w)), Float((c.y ?? 0.5) * Double(h)), Float(radius),
+         Float((c.angle ?? 0) * .pi / 180), Float(progress), Float(c.seed ?? c.f), Float(k0), Float(k1)]
+    }
+
     /// Output frames the echo at output frame `frame` reads (ghosts are `hold` cue frames apart, converted to the output rate).
     func echoFrames(frame: Int, cues: [Cue]) -> [Int] {
         let s = state(u: Double(frame) * 24 / fps, cues: cues)
@@ -158,7 +189,7 @@ final class Effects {
     }
 
     /// One output frame (index `frame` at `fps`); cues are read on the 24 fps grid at the frame's exact time.
-    func apply(_ src: CIImage, frame: Int, cues: [Cue], lights: CIImage?, previous: (Int) -> CIImage? = { _ in nil }) -> CIImage {
+    func apply(_ src: CIImage, frame: Int, cues: [Cue], lights: CIImage?, previous: (Int) -> CIImage? = { _ in nil }) throws -> CIImage {
         let u = Double(frame) * 24 / fps
         let s = state(u: u, cues: cues)
         var img = src
@@ -209,6 +240,7 @@ final class Effects {
             img = inf.cropped(to: extent)
         }
         if s.edge > 0.3 { img = edgeBlur(img, radius: s.edge) }
+        if !s.warps.isEmpty, let shader { for (name, params) in s.warps { img = try shader.apply(name, to: img, params: params) } }
 
         // Light.
         if s.bloom > 0.01 {
@@ -230,6 +262,8 @@ final class Effects {
             f.backgroundImage = img
             img = f.outputImage!.cropped(to: extent)
         }
+
+        if let params = s.streaks, let shader { img = try shader.apply("streaks", to: img, params: params) }
 
         // Lens / signal damage.
         if s.rgb > 0.0003 || s.rgbShift > 0.05 { img = chroma(img, radial: s.rgb, shift: s.rgbShift) }

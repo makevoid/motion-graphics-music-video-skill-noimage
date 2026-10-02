@@ -135,6 +135,10 @@ try await writer.finish()
 
 ## Video, audio and performance
 
+**Parallel renders:** `--from A --to B` renders one chunk of a movie (times stay absolute). Through Ruby, `JOBS=8 … graphics:render[...]` (default: cores − 2, at most 8) splits a movie into chunks rendered by parallel processes, joins them by stream copy and muxes the audio once; frames are pure functions of time, so the result matches a sequential render.
+
+`MetalShader` runs runtime-compiled MSL compute kernels on a frame (CIImage → MTLTexture → kernel → CIImage, top-left texture origin, 12 float params per pass); mvfx's shader cues use it.
+
 `--supersample N` (1-4) draws the scene at N× and Lanczos-downscales before particles and effects (about 2× the draw time at N=2). `--bitrate` sets the average H.264/HEVC bits/s (default 0.18 bit/pixel/frame: 22 Mb/s at 1080p60). Through Ruby: `SUPERSAMPLE=2 BITRATE=15000000 … graphics:render[...]`.
 
 PNG and ProRes 4444 MOV preserve transparency. H.264/HEVC are opaque and flatten graphics over black when no plate exists. AVAssetWriter chooses the available encoder; hardware encoding is not guaranteed. Output is SDR sRGB/Rec.709 with 8-bit BGRA encoder buffers; Metal intermediates are half-float, but this is not an HDR mastering pipeline.

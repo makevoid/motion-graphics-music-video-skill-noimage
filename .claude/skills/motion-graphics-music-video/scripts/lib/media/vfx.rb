@@ -11,7 +11,7 @@ module Media
     ROOT = File.expand_path("../..", __dir__)
     PACKAGE = File.join(ROOT, "tools", "vfx")
     BIN = File.join(PACKAGE, ".build", "release", "mvfx")
-    CORE_IMAGE = %w[punch zoom shake whip mblur edgeblur glow flash dark rgb glitch tv grain stretch echo bands].freeze
+    CORE_IMAGE = %w[punch zoom shake whip mblur edgeblur glow flash dark rgb glitch tv grain stretch echo bands shockwave lens heat streaks].freeze
     LIGHTS = %w[leak flare glints].freeze
 
     attr_reader :name, :dir

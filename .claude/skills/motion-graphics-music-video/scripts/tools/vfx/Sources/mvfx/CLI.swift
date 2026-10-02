@@ -49,7 +49,7 @@ struct Options {
         let wanted = opt.stills == nil ? Array(first..<last) : opt.only.map(toOut)
         guard !wanted.isEmpty, Set(wanted).count == wanted.count, wanted.allSatisfy({ $0 >= 0 && $0 < total }) else { throw GraphicsError.invalid("Invalid/empty VFX preview frames") }
         let data = try Data(contentsOf:URL(fileURLWithPath:opt.cues)), cues = try JSONDecoder().decode(CueFile.self,from:data).cues
-        let known = Set(["punch","zoom","shake","whip","mblur","edgeblur","glow","flash","dark","rgb","glitch","tv","grain","stretch","echo","bands","leak","flare","glints"])
+        let known = Set(["punch","zoom","shake","whip","mblur","edgeblur","glow","flash","dark","rgb","glitch","tv","grain","stretch","echo","bands","shockwave","lens","heat","streaks","leak","flare","glints"])
         guard cues.allSatisfy({ known.contains($0.fx) && $0.dur > 0 && ($0.pre ?? 0) >= 0 }) else { throw GraphicsError.invalid("Invalid VFX cue") }
         let fx = Effects(width:width,height:height,fps:fps), lights = try NativeLights(width:width,height:height,cues:cues)
         // Existing cue amounts were authored with nonlinear RGB blending.
@@ -89,7 +89,7 @@ struct Options {
                 }
                 let src = try source.image(at:time.seconds,size:compositor.extent.size)
                 if reach > 0 { recent[frame] = src; ghosts.forEach { recent[$0.key] = $0.value }; recent = recent.filter { $0.key >= frame-reach } }
-                return fx.apply(src,frame:frame,cues:cues,lights:light,previous:{ ghosts[$0] })
+                return try fx.apply(src,frame:frame,cues:cues,lights:light,previous:{ ghosts[$0] })
             }
             if let writer { try await writer.append(image,frame:index,compositor:compositor) }
             else { try ImageAsset.writePNG(compositor.image(image),to:destination.appendingPathComponent(String(format:"%04d.png",opt.only[index]))) } // named by cue frame

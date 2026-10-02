@@ -65,6 +65,57 @@ RSpec.describe "Swift VFX end to end", :swift do
     expect(File.file?(service.stills([30]))).to be(true) # a lone still decodes its own ghost frames
   end
 
+  it "renders a scene movie in parallel chunks identical to a sequential render, with one continuous audio track" do
+    File.write(file("chunks.json"), JSON.generate({ "background" => "#101020", "nodes" => [
+      { "type" => "rect", "width" => 40, "height" => 40, "fill" => "#ff5a1f", "y" => 70, "tracks" => { "x" => [[0, 0], [2, 280]] } },
+      { "type" => "circle", "radius" => 12, "x" => 160, "y" => 40, "fill" => nil, "stroke" => "#2ee6ff", "strokeWidth" => 1.5, "glow" => 6,
+        "tracks" => { "scaleX" => [[0, 1], [2, 3]], "scaleY" => [[0, 1], [2, 3]] } }] }))
+    ff.run("ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=330:duration=3", "-ac", "2", file("tone.wav"))
+    g = Media::Graphics.new
+    g.render(file("chunks.json"), file("seq.mp4"), width: 320, height: 180, fps: 60, frames: 120, audio: file("tone.wav"), bitrate: 4_000_000, supersample: 2)
+    report = g.render(file("chunks.json"), file("par.mp4"), width: 320, height: 180, fps: 60, frames: 120, audio: file("tone.wav"), bitrate: 4_000_000,
+                      supersample: 2, jobs: 3)
+    expect(report["jobs"]).to eq(3)
+    info = ff.summary(file("par.mp4"))
+    expect(info.dig(:video, :frames)).to eq(120)
+    expect(info.dig(:audio, :codec)).to eq("aac")
+    expect(ff.duration(file("par.mp4"))).to be_within(0.05).of(2.0)
+    expect(File.exist?(file("par.mp4.parts"))).to be(false)
+    [39, 40, 80, 119].each do |frame| # chunk edges are 0/40/80: no dropped, doubled or shifted frames
+      ff.frame_index(file("seq.mp4"), frame, file("s#{frame}.png")); ff.frame_index(file("par.mp4"), frame, file("p#{frame}.png"))
+      diff = magick.run("magick", file("s#{frame}.png"), file("p#{frame}.png"), "-compose", "difference", "-composite", "-format", "%[fx:mean]", "info:", quiet: true).to_f
+      expect(diff).to be < 0.01
+    end
+    expect { g.render(file("chunks.json"), file("par.mp4"), width: 320, height: 180, fps: 60, frames: 120, jobs: 3) }.to raise_error(Media::CommandError, /exists/)
+  end
+
+  it "runs Metal shader cues on the frame: lens streaks off thin highlights, a refraction ring, heat shimmer, a lens kick" do
+    source = file("bar.mp4")
+    ff.run("ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=black:s=320x180:r=24:d=3,drawbox=x=296:y=100:w=4:h=80:color=white:t=fill,drawbox=x=10:y=20:w=140:h=60:color=white:t=fill",
+           "-f", "lavfi", "-i", "sine=frequency=440:duration=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", source)
+    name = "e2e-vfx-shaders-#{Process.pid}"
+    dir = File.join(RT, "prompts", name); FileUtils.mkdir_p(dir)
+    File.write(File.join(dir, "cues.yml"), YAML.dump({ "source" => source, "out" => file("shaded.mp4"),
+      "cues" => [{ "fx" => "streaks", "f" => 0, "dur" => 12, "amt" => 2, "radius" => 0.5, "shape" => "span", "fade" => 1 },
+                 { "fx" => "shockwave", "f" => 24, "dur" => 12, "amt" => 1, "x" => 0.5, "y" => 0.5, "radius" => 0.3 },
+                 { "fx" => "heat", "f" => 48, "dur" => 12, "amt" => 8, "shape" => "span", "fade" => 1 },
+                 { "fx" => "lens", "f" => 60, "dur" => 8, "amt" => 0.3 }] }))
+    Media::Vfx.new(name).render
+    expect(ff.summary(file("shaded.mp4")).dig(:video, :frames)).to eq(72)
+    luma = ->(png, x, y) { magick.run("magick", png, "-format", "%[fx:int(255*p{#{x},#{y}}.intensity)]", "info:", quiet: true).to_i }
+    diff = ->(frame) {
+      ff.frame_index(source, frame, file("o#{frame}.png")); ff.frame_index(file("shaded.mp4"), frame, file("s#{frame}.png"))
+      magick.run("magick", file("o#{frame}.png"), file("s#{frame}.png"), "-compose", "difference", "-composite", "-format", "%[fx:mean]", "info:", quiet: true).to_f
+    }
+    diff.(6)
+    bar = luma.(file("s6.png"), 256, 140) - luma.(file("o6.png"), 256, 140)                # 40 px left of a 4 px bar
+    block = luma.(file("s6.png"), 190, 50) - luma.(file("o6.png"), 190, 50)                # 40 px right of a 140 px block
+    expect(bar).to be > 6                                                                    # the thin bar flares sideways ...
+    expect(block).to be < bar / 3                                                           # ... a solid area barely does
+    [28, 52, 61].each { |frame| expect(diff.(frame)).to be > 0.002 }                       # ring, shimmer, lens all move pixels
+    expect(diff.(70)).to be < 0.004                                                         # after the cues: untouched
+  end
+
   it "renders VFX on a 60 fps video with 24 fps cues: sideways RGB split, VHS bands, every output frame kept" do
     source = file("hfr.mp4")
     ff.run("ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=black:s=320x180:r=60:d=2,drawbox=x=140:y=0:w=40:h=180:color=white:t=fill",
