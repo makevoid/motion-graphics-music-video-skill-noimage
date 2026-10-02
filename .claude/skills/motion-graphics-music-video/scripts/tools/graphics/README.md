@@ -137,6 +137,8 @@ try await writer.finish()
 
 **Parallel renders:** `--from A --to B` renders one chunk of a movie (times stay absolute). Through Ruby, `JOBS=8 … graphics:render[...]` (default: cores − 2, at most 8) splits a movie into chunks rendered by parallel processes, joins them by stream copy and muxes the audio once; frames are pure functions of time, so the result matches a sequential render.
 
+**Shader node:** `{"type":"shader","shader":"nebula","width":W,"height":H,...}` draws a procedural Metal picture like an image: domain-warped fbm gas (`colors`: deep, bright, filaments), ridged `filaments`, a blue synchrotron `core`, sparse `stars`, `detail` (noise scale), `swirl`, `seed`; optionally inside a ragged disc of `radius` around `center`. Tracks: `evolve` (gas time; default seconds × `drift`), `reveal` (grows the disc), `brightness`. With an `anchor`, `x`/`y` place the anchor point. `"shader":"starfield"`: three parallax layers of twinkling stars (`stars` density, default 1; `twinkle` 0–1; `colors` mostly the first, some second/third; spikes on bright near stars) drifting with `evolve`; `pulse` (amount) with a `beat` track (phase 0 → 1 between beats) swells them on each beat and sends a soft light ring out from `center`; `radius` > 0 fades the field beyond it.
+
 `MetalShader` runs runtime-compiled MSL compute kernels on a frame (CIImage → MTLTexture → kernel → CIImage, top-left texture origin, 12 float params per pass); mvfx's shader cues use it.
 
 `--supersample N` (1-4) draws the scene at N× and Lanczos-downscales before particles and effects (about 2× the draw time at N=2). `--bitrate` sets the average H.264/HEVC bits/s (default 0.18 bit/pixel/frame: 22 Mb/s at 1080p60). Through Ruby: `SUPERSAMPLE=2 BITRATE=15000000 … graphics:render[...]`.

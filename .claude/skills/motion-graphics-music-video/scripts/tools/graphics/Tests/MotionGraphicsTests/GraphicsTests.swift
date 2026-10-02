@@ -307,6 +307,51 @@ final class GraphicsTests: XCTestCase {
         let canvas = try Canvas(width:64,height:32); canvas.image(try c.image(source.image(at:0,size:c.extent.size)),in:c.extent)
         XCTAssertEqual(pixel(canvas,4,4)[3],128,accuracy:4); XCTAssertEqual(pixel(canvas,4,28)[3],0,accuracy:2)
     }
+    func testShaderNodeDrawsProceduralNebulaInsideItsRevealedDisc() throws {
+        guard MTLCreateSystemDefaultDevice() != nil else { throw XCTSkip("Metal unavailable") }
+        let url = try temp().appendingPathComponent("scene.json")
+        let json = """
+        {"nodes":[{"type":"shader","shader":"nebula","width":160,"height":90,"center":[80,45],"radius":40,"seed":7,
+                   "colors":["#3A0F5C","#FF5A1F","#FFD27A"],"core":1,"tracks":{"reveal":[[0,0.01],[1,1]],"brightness":[[0,2],[1,2]]}}]}
+        """
+        try Data(json.utf8).write(to:url)
+        let doc = try SceneDocument(url:url,width:160,height:90)
+        func light(_ frame: Int) throws -> (centre: Int, corner: Int) {
+            let c = try Canvas(width:160,height:90); c.clear(); try doc.scene.draw(on:c,at:FrameTime(frame:frame,fps:24))
+            let sum = { (x0: Int, y0: Int) in (y0..<y0+10).reduce(0) { s,y in s+(x0..<x0+10).reduce(0) { $0+Int(self.pixel(c,$1,y)[3]) } } }
+            return (sum(75,40), sum(0,0))
+        }
+        let early = try light(0), late = try light(24)
+        XCTAssertLessThan(early.centre,late.centre/4)     // reveal grows the cloud from nothing
+        XCTAssertGreaterThan(late.centre,1500)            // gas + synchrotron core light the middle
+        XCTAssertLessThan(late.corner,late.centre/3)      // outside the disc: only sparse stars
+        for bad in ["{\"nodes\":[{\"type\":\"shader\",\"shader\":\"plasma\"}]}",
+                    "{\"nodes\":[{\"type\":\"shader\",\"shader\":\"nebula\",\"colors\":[1]}]}",
+                    "{\"nodes\":[{\"type\":\"shader\",\"shader\":\"nebula\",\"tracks\":{\"trimEnd\":[[0,0],[1,1]]}}]}"] {
+            try Data(bad.utf8).write(to:url); XCTAssertThrowsError(try SceneDocument(url:url,width:32,height:32))
+        }
+    }
+    func testStarfieldShaderDrawsSparseTwinklingStarsThatSwellOnTheBeat() throws {
+        guard MTLCreateSystemDefaultDevice() != nil else { throw XCTSkip("Metal unavailable") }
+        let url = try temp().appendingPathComponent("scene.json")
+        try Data("""
+        {"nodes":[{"type":"shader","shader":"starfield","width":480,"height":270,"seed":3,"pulse":1,"twinkle":0.8,
+                   "colors":["#EDE6D8","#FF5A1F","#2EE6FF"],"tracks":{"beat":[[0,0],[1,1]]}}]}
+        """.utf8).write(to:url)
+        let doc = try SceneDocument(url:url,width:480,height:270)
+        func frame(_ n: Int) throws -> (sum: Int, lit: Int) {
+            let c = try Canvas(width:480,height:270); c.clear(); try doc.scene.draw(on:c,at:FrameTime(frame:n,fps:24))
+            var sum = 0, lit = 0
+            for y in stride(from:0,to:270,by:1) { for x in stride(from:0,to:480,by:1) { let a = Int(self.pixel(c,x,y)[3]); sum += a; if a > 40 { lit += 1 } } }
+            return (sum, lit)
+        }
+        let onBeat = try frame(0), settled = try frame(23)
+        XCTAssertGreaterThan(settled.lit,30)                   // there are stars ...
+        XCTAssertLessThan(settled.lit,480*270/20)             // ... sparse ones
+        XCTAssertGreaterThan(onBeat.sum,settled.sum*5/4)      // the beat swells them
+        try Data("{\"nodes\":[{\"type\":\"shader\",\"shader\":\"starfield\",\"tracks\":{\"swirl\":[[0,0],[1,1]]}}]}".utf8).write(to:url)
+        XCTAssertThrowsError(try SceneDocument(url:url,width:32,height:32))
+    }
     func testAudioAnalysisUsesAbsoluteSampleBoundaries() throws {
         let url = try temp().appendingPathComponent("tone.wav")
         let format = AVAudioFormat(standardFormatWithSampleRate:44100,channels:1)!

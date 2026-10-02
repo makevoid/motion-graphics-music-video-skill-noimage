@@ -9,13 +9,13 @@ import Metal
 /// Every kernel has this signature (the source is compiled at runtime, no build step):
 ///     kernel void name(texture2d<float,access::sample> src [[texture(0)]], texture2d<float,access::write> dst [[texture(1)]],
 ///                      constant ShaderParams &p [[buffer(0)]], uint2 gid [[thread_position_in_grid]])
-/// with `struct ShaderParams { float4 a, b, c; }` filled from `params` (12 floats, zero padded). Texture row 0 is the top
+/// with `struct ShaderParams { float4 a, b, c, d, e, f; }` filled from `params` (up to 24 floats, zero padded). Texture row 0 is the top
 /// of the picture and colours are linear, premultiplied.
 public final class MetalShader {
     public static let header = """
     #include <metal_stdlib>
     using namespace metal;
-    struct ShaderParams { float4 a; float4 b; float4 c; };
+    struct ShaderParams { float4 a; float4 b; float4 c; float4 d; float4 e; float4 f; };
     constexpr sampler linearClamp(coord::pixel, address::clamp_to_edge, filter::linear);
     static inline float4 at(texture2d<float,access::sample> t, float2 p) { return t.sample(linearClamp, p + 0.5); }
     static inline float hash21(float2 p) { p = fract(p*float2(123.34,456.21)); p += dot(p,p+45.32); return fract(p.x*p.y); }
@@ -45,17 +45,23 @@ public final class MetalShader {
 
     /// Runs one kernel. The returned image is materialized (it does not alias the shared output texture), so passes chain.
     public func apply(_ function: String, to image: CIImage, params: [Float]) throws -> CIImage {
+        CIImage(cgImage:try run(function,input:image,params:params))
+    }
+    /// Runs a generator kernel (one that ignores `src`, e.g. procedural gas or stars) and returns its picture.
+    public func generate(_ function: String, params: [Float]) throws -> CGImage { try run(function,input:nil,params:params) }
+
+    private func run(_ function: String, input image: CIImage?, params: [Float]) throws -> CGImage {
         guard let pipeline = pipelines[function] else { throw GraphicsError.invalid("Unknown shader \(function)") }
-        guard params.count <= 12 else { throw GraphicsError.invalid("Shader params are at most 12 floats") }
+        guard params.count <= 24 else { throw GraphicsError.invalid("Shader params are at most 24 floats") }
         guard let command = queue.makeCommandBuffer() else { throw GraphicsError.unavailable("Metal command failed") }
         let w = input.width, h = input.height, bounds = CGRect(x:0,y:0,width:w,height:h)
         // Core Image's origin is bottom-left; flip so texture row 0 is the top of the frame, as cue coordinates are.
         let flip = CGAffineTransform(scaleX:1,y:-1).translatedBy(x:0,y:-CGFloat(h))
-        context.render(image.transformed(by:flip),to:input,commandBuffer:command,bounds:bounds,colorSpace:space)
+        if let image { context.render(image.transformed(by:flip),to:input,commandBuffer:command,bounds:bounds,colorSpace:space) }
         guard let encoder = command.makeComputeCommandEncoder() else { throw GraphicsError.unavailable("Metal compute failed") }
         encoder.setComputePipelineState(pipeline); encoder.setTexture(input,index:0); encoder.setTexture(output,index:1)
-        var u = (params + Array(repeating:0,count:12-params.count))
-        encoder.setBytes(&u,length:MemoryLayout<Float>.stride*12,index:0)
+        var u = (params + Array(repeating:0,count:24-params.count))
+        encoder.setBytes(&u,length:MemoryLayout<Float>.stride*24,index:0)
         let tw = pipeline.threadExecutionWidth, th = max(1,pipeline.maxTotalThreadsPerThreadgroup/tw)
         encoder.dispatchThreads(MTLSize(width:w,height:h,depth:1),threadsPerThreadgroup:MTLSize(width:tw,height:th,depth:1))
         encoder.endEncoding(); command.commit(); command.waitUntilCompleted()
@@ -63,6 +69,6 @@ public final class MetalShader {
         guard let wrapped = CIImage(mtlTexture:output,options:[.colorSpace:space]) else { throw GraphicsError.io("Cannot wrap shader output") }
         // Materialize now: the next pass reuses `output`.
         guard let cg = context.createCGImage(wrapped.transformed(by:flip),from:bounds,format:.RGBAh,colorSpace:space) else { throw GraphicsError.io("Shader readback failed") }
-        return CIImage(cgImage:cg)
+        return cg
     }
 }

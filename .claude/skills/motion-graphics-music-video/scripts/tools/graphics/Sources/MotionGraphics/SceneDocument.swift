@@ -74,7 +74,8 @@ public final class SceneDocument {
                     "text","font","size","outline","outlineWidth","reveal","path","frames","fps","loop","audioAt","clipData","clipName",
                     "progress","spacing","seed","roughness","samples","samplesData","words","wordsData","entrance","color","arcStart","arcEnd","arcMode",
                     "trimStart","trimEnd","boil","boilRate","align","tracking","strength","falloff","twist","center","resolution",
-                    "skewX","skewY","rotationX","rotationY","z","panX","panY","perspective","offset","count","sides","aspect","fade","glow","glowCore"])
+                    "skewX","skewY","rotationX","rotationY","z","panX","panY","perspective","offset","count","sides","aspect","fade","glow","glowCore",
+                    "shader","colors","brightness","drift","detail","swirl","filaments","core","stars","twinkle","pulse"])
         let type = try o.string("type"), name = try o.string("name","")
         let w = try o.number("width",100), h = try o.number("height",100), radius = try o.number("radius",50)
         let color = try o.color("color",Color(0,1,1)) ?? .clear
@@ -176,6 +177,15 @@ public final class SceneDocument {
             let trace = TraceNode(try points(o),name:name); trace.color = color; trace.lineWidth = try o.number("strokeWidth",3)
             if let progress = o.raw["progress"] { trace.progress = try track(progress) }; n = trace
         case "grid": n = Designs.grid(width:w,height:h,spacing:try o.number("spacing",48),color:color)
+        case "shader":
+            let shader = try ShaderNode(shader:try o.string("shader"),width:w,height:h,name:name)
+            if let list = o.raw["colors"] { guard let hexes = list as? [String], !hexes.isEmpty else { throw GraphicsError.invalid("shader colors must be hex strings") }; shader.colors = try hexes.map { try Color(hex:$0) } }
+            shader.center = try o.point("center",CGPoint(x:w/2,y:h/2)); shader.radius = max(0,try o.number("radius",0))
+            shader.reveal = try o.number("reveal",1); shader.brightness = try o.number("brightness",1); shader.drift = try o.number("drift",0.25)
+            shader.detail = try o.number("detail",3); shader.swirl = try o.number("swirl",4); shader.filaments = try o.number("filaments",1)
+            shader.core = try o.number("core",0); shader.stars = try o.number("stars",shader.shader == "starfield" ? 1 : 0); shader.seed = try o.number("seed",1); shader.resolution = try o.number("resolution",1)
+            shader.twinkle = max(0,min(1,try o.number("twinkle",0.6))); shader.pulse = max(0,try o.number("pulse",0))
+            n = shader
         case "warpgrid":
             let grid = WarpGridNode(width:w,height:h,spacing:try o.number("spacing",60),center:try o.point("center",CGPoint(x:w/2,y:h/2)),name:name)
             grid.color = color; grid.lineWidth = try o.number("strokeWidth",1); grid.strength = try o.number("strength",0.5)
@@ -215,6 +225,7 @@ public final class SceneDocument {
         case is PlaneNode: specific = ["rotationX","rotationY","z","panX","panY"]
         case is TextPathNode: specific = ["offset","reveal"]
         case is RingsNode: specific = ["phase","twist","spacing","strokeWidth"]
+        case is ShaderNode: specific = ["evolve","reveal","brightness","beat"]
         default: specific = []
         }
         let animated = ["x","y","rotation","scaleX","scaleY","opacity","skewX","skewY","glow"] + specific
