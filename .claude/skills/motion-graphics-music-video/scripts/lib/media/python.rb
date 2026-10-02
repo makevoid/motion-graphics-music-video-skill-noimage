@@ -41,7 +41,17 @@ module Media
                      "python", File.join(SCRIPTS, "transcribe_local.py"), audio, from.to_s, seconds.to_s, model, language, quiet: true).lines.last)
     end
 
-    # Local Demucs vocals/no_vocals WAVs (full-song aligned) through an ephemeral uv environment; no Fal call.
+    # Music map (tools/python/music_map.py, numpy + scipy in an ephemeral uv environment; no Fal call).
+    # cmd: "all" (input song, out dir; stems: dir with drums/bass/vocals/no_vocals.wav), "beats", "hits", "vocals",
+    # "sections" (out .json). opts: drums:, bass:, beats:, hits:, vocals:, stems: paths; fps:, tempo: auto|constant|local.
+    def music_map(cmd, input, out, **opts)
+      raise CommandError, "uv is required for the music map (https://docs.astral.sh/uv/)" unless Shell.available?("uv")
+      flags = opts.compact.flat_map { |k, v| ["--#{k.to_s.tr("_", "-")}", v.to_s] }
+      JSON.parse(run("uv", "run", "--quiet", "--no-project", "--python", "3.12", "--with", "numpy", "--with", "scipy", "--with", "soundfile",
+                     "python", File.join(SCRIPTS, "music_map.py"), cmd, input, out, *flags, quiet: true).lines.last)
+    end
+
+    # Local Demucs stem WAVs (vocals, no_vocals, drums, bass, other) (full-song aligned) through an ephemeral uv environment; no Fal call.
     def stems_local(audio, out, from: 0.0, seconds: 0.0, model: ENV["MV_DEMUCS_MODEL"] || "htdemucs")
       raise CommandError, "uv is required for local stems (https://docs.astral.sh/uv/)" unless Shell.available?("uv")
       JSON.parse(run("uv", "run", "--quiet", "--no-project", "--python", "3.12", "--with", "demucs", "--with", "soundfile",

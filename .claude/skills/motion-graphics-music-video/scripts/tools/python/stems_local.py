@@ -1,6 +1,7 @@
 """Local Demucs vocal separation. usage: stems_local.py audio.wav out_dir [from_seconds] [seconds] [model]
 
-Writes out_dir/vocals.wav and out_dir/no_vocals.wav, both aligned to `from_seconds` of the source
+Writes out_dir/vocals.wav and out_dir/no_vocals.wav plus every other model source (htdemucs: drums.wav, bass.wav,
+other.wav; same cost, one pass), all aligned to `from_seconds` of the source
 (prefix-padded with silence so they stay full-song aligned when from_seconds > 0). Prints JSON paths.
 """
 import json
@@ -40,12 +41,12 @@ with torch.no_grad():
     sources = apply_model(model, wav[None], device=device, split=True, overlap=0.25, progress=False)[0]
 sources = sources * (ref.std() + 1e-8) + ref.mean()
 vi = model.sources.index("vocals")
-vocals = sources[vi].cpu().numpy().T
-rest = (sources.sum(0) - sources[vi]).cpu().numpy().T
+stems = {n: sources[i].cpu().numpy().T for i, n in enumerate(model.sources)}
+stems["no_vocals"] = (sources.sum(0) - sources[vi]).cpu().numpy().T
 os.makedirs(out, exist_ok=True)
 pad = np.zeros((a, 2), dtype=np.float32)
 paths = {}
-for key, sig in (("vocals", vocals), ("no_vocals", rest)):
+for key, sig in stems.items():
     p = os.path.join(out, f"{key}.wav")
     sf.write(p, np.concatenate([pad, sig]), rate)
     paths[key] = p

@@ -27,10 +27,15 @@ module Toolkit
       "anim:overlay" => "Render RUN's saved overlay data (local)",
       "anim:prepare" => "Prepare local overlay cues from optional full-song [words.json], without Fal",
       "audio:analyze" => "Decode and analyze song beats/energy: [audio,out_dir] (local)",
+      "audio:map" => "Music map: [audio,out_dir,stems_dir] tempo-map beats, drum hits, vocal phrases, sections (scipy, uv; free)",
+      "audio:beatmap" => "Beats + local tempo map + downbeats: [audio,out.json,drums.wav] (scipy; MV_TEMPO=auto|constant|local)",
+      "audio:hits" => "Kick/snare/hat (+808 notes) attack times on the grid: [drums.wav,out.json,beatmap.json,bass.wav] (scipy)",
+      "audio:vocals" => "Vocal lines/phrases/onsets from a vocal stem: [vocals.wav,out.json,beatmap.json] (scipy)",
+      "audio:sections" => "Per-bar features + drop/build/breakdown sections: [audio,out.json,beatmap.json,hits.json,vocals.json] (scipy)",
       "audio:transcribe" => "Word timestamps with Fal Whisper: [audio,out.json] (paid)",
       "audio:transcribe_local" => "Local mlx-whisper word timestamps: [audio,out.json,from,seconds] (Apple Silicon, uv; free)",
       "media:stems" => "Fal Demucs: [audio,out_dir,vocals,...] (paid)",
-      "media:stems_local" => "Local Demucs vocals: [audio,out_dir,from,seconds] (uv; free, full-song aligned)",
+      "media:stems_local" => "Local Demucs vocals/no_vocals/drums/bass/other: [audio,out_dir,from,seconds] (uv; free, full-song aligned)",
       "media:probe" => "Probe [path]",
       "media:sheet" => "Contact sheet [video,out.jpg]",
       "media:frames" => "Dense reference analysis [video,out_dir,fps,width]",
@@ -103,6 +108,11 @@ module Toolkit
       when "anim:overlay" then emit Pipeline::Steps::Overlay.new.render!
       when "anim:prepare" then emit Pipeline::Steps::Overlay.new.prepare!(a[0])
       when "audio:analyze" then required(a, 2); analyze_audio(*a)
+      when "audio:map" then required(a, 2); emit py.music_map("all", a[0], a[1], stems: a[2], tempo: ENV["MV_TEMPO"])
+      when "audio:beatmap" then required(a, 2); emit py.music_map("beats", a[0], a[1], drums: a[2], tempo: ENV["MV_TEMPO"])
+      when "audio:hits" then required(a, 2); emit py.music_map("hits", a[0], a[1], beats: a[2], bass: a[3])
+      when "audio:vocals" then required(a, 2); emit py.music_map("vocals", a[0], a[1], beats: a[2])
+      when "audio:sections" then required(a, 3); emit py.music_map("sections", a[0], a[1], beats: a[2], hits: a[3], vocals: a[4])
       when "audio:transcribe"
         required(a, 2); c = Fal::Client.new; result = Fal::Models::Whisper.new(client: c).transcribe(audio_url: c.upload(a[0]), chunk_level: "word")
         FileUtils.mkdir_p(File.dirname(a[1])); File.write(a[1], JSON.pretty_generate(result.output)); emit(path: a[1], request_id: result.request_id)

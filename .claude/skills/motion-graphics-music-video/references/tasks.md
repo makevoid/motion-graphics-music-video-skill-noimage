@@ -165,7 +165,12 @@ ruby scripts/mv.rb --project /absolute/project 'media:frames[reference.mp4,outpu
 ruby scripts/mv.rb --project /absolute/project 'media:cuts[reference.mp4,output/cuts.json]'
 ruby scripts/mv.rb --project /absolute/project 'media:montage[output/review/strip.jpg,8,240,tmp/f/f_097.png,tmp/f/f_098.png]'
 ruby scripts/mv.rb --project /absolute/project 'audio:transcribe_local[audio/source.mp3,audio/words_local.json,23,12]'
-ruby scripts/mv.rb --project /absolute/project 'media:stems_local[audio/source.mp3,audio/stems,0,60]'
+ruby scripts/mv.rb --project /absolute/project 'media:stems_local[audio/song.wav,audio/stems,0,0]'
+ruby scripts/mv.rb --project /absolute/project 'audio:map[audio/song.wav,audio/map,audio/stems]'
+ruby scripts/mv.rb --project /absolute/project 'audio:beatmap[audio/song.wav,audio/map/beatmap.json,audio/stems/drums.wav]'
+ruby scripts/mv.rb --project /absolute/project 'audio:hits[audio/stems/drums.wav,audio/map/hits.json,audio/map/beatmap.json,audio/stems/bass.wav]'
+ruby scripts/mv.rb --project /absolute/project 'audio:vocals[audio/stems/vocals.wav,audio/map/vocals.json,audio/map/beatmap.json]'
+ruby scripts/mv.rb --project /absolute/project 'audio:sections[audio/song.wav,audio/map/sections.json,audio/map/beatmap.json,audio/map/hits.json,audio/map/vocals.json]'
 ruby scripts/mv.rb --project /absolute/project 'media:mouth[output/s01/04_clips/sing,audio/stems/vocals.wav,0,120,60,40,20]'
 ruby scripts/mv.rb --project /absolute/project 'anim:render[tools/graphics/examples/futuristic.json,tmp/smoke,48,1920,1080]'
 SFX=finish-sfx ruby scripts/mv.rb --project /absolute/project sfx:gen
@@ -177,7 +182,14 @@ VFX=finish-vfx ruby scripts/mv.rb --project /absolute/project vfx:render
 ruby scripts/mv.rb --project /absolute/project 'media:twitter[output/finished.mp4,output/delivery-1080.mp4]'
 ```
 
-`media:montage` tiles frames into a labelled contact strip (columns, tile width) for frame-exact sync review. `audio:transcribe_local` (mlx-whisper; `MV_WHISPER_MODEL`, `MV_WHISPER_LANG`) and `media:stems_local` (Demucs `htdemucs` on MPS; `MV_DEMUCS_MODEL`) are free local alternatives run through `uv`; their timestamps refer to the whole song. Sung or heavily processed vocals can still hallucinate words; verify by listening.
+`media:montage` tiles frames into a labelled contact strip (columns, tile width) for frame-exact sync review. `audio:transcribe_local` (mlx-whisper; `MV_WHISPER_MODEL`, `MV_WHISPER_LANG`) and `media:stems_local` (Demucs `htdemucs` on MPS; `MV_DEMUCS_MODEL`; writes vocals, no_vocals, drums, bass and other in one pass) are free local alternatives run through `uv`; their timestamps refer to the whole song. Sung or heavily processed vocals can still hallucinate words; verify by listening.
+
+**Music map (sync timing).** `audio:map` runs `tools/python/music_map.py` (numpy + scipy through `uv`, free, ~2 s per song) and writes four JSON files; the single-purpose tasks write one each. Times are seconds of the input file; `f` is the 24fps frame.
+
+- `beatmap.json`: `beats[{n,t,raw,bar,pos,f}]`, `bars[{bar,t,bpm}]`, `downbeat_phase`, `snare_feel` (backbeat/halftime), `tempo_mode`. Comb-locked tracking follows tempo drift — generated songs often shift a fraction of a BPM at section joins, which a single global grid turns into 100+ ms of error by the second chorus. `MV_TEMPO=constant` forces one straight grid.
+- `hits.json`: `kick`/`snare`/`hat` (and `bass` 808 notes with pitch when a bass stem is given) as `{t,s,db,beat,bar,step}`. `t` is the attack's half-rise point, not the energy peak; cue flashes there. `bars[]` prints 16-step patterns (`x.......x.......`) for reading the groove. Prefer the drums stem; kicks fused with an 808 may read as `bass` notes instead.
+- `vocals.json`: `lines` (lyric lines), `phrases` (words/notes) and `onsets` from a vocal stem, each with bar/step.
+- `sections.json`: per-bar sub/low/mid/high/rms dB and hit counts, grouped into `drop`/`build`/`filtered`/`breakdown`/`groove` (+`vox`) sections with an `energy` 0–1. Labels are heuristics from band presence; confirm by listening.
 
 `media:probe`, `media:sheet`, `media:frame`, `media:cut`, `media:cutout`, `media:sprite_box`, `media:style`, `media:concat`, `media:mux`, `media:upload` and `media:youtube` are listed by `-T` with their arguments. Export names denote encoding presets; they do not publish to platforms. For unlisted operations, add an OOP service under `lib/` and a thin registry delegate. Keep backend code under `tools/` and tests in `spec/`.
 
