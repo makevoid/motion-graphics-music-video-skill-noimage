@@ -6,6 +6,12 @@ Most visual and sound generation uses **Swift**: Core Graphics and Core Text dra
 
 This is the **no-image-generation fork**. It builds motion graphics from code and can use supplied assets. GPT Image 2.5, Nano Banana and MiniMax H3 image/video generation have been removed. The default Swift workflow needs no Fal API key or credits. Fal audio support remains available for future use: Music3, Stable Audio SFX, Whisper transcription and Demucs stem separation, with the shared client and schema tools retained.
 
+### NOTE
+
+Please follow the README on the [original repo](https://github.com/makevoid/motion-graphics-music-video-skill) adding `-noimage` at the end of the commands. This readme is not yet up to date.
+
+This plugin has been tested few times and consistently seems to produce great results without the downside of spending for FAL AI credits for MiniMax H3. This plugin draws/generate everything with local Swift tools, it's super fast and you can get great results with little iterations and render time.
+
 [Skill instructions](.claude/skills/motion-graphics-music-video/SKILL.md) · [Native workflow](.claude/skills/motion-graphics-music-video/references/native-workflow.md) · [Task reference](.claude/skills/motion-graphics-music-video/references/tasks.md) · [Testing](.claude/skills/motion-graphics-music-video/references/testing.md)
 
 ## Video made with this skill
