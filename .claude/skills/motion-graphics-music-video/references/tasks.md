@@ -7,6 +7,8 @@ motion-graphics-music-video/
   SKILL.md
   references/                    agent instructions
   assets/plan-template.md        planning document template
+  assets/scene-template.rb       runnable scene generator skeleton (copy to <project>/scenes/)
+  assets/finish-cues-template.rb SFX/VFX cue sheets from the scene's events (copy to <project>/scenes/)
   scripts/
     mv.rb                        Ruby CLI/bootstrap/project initializer
     Rakefile                     require Ruby task registry; install delegates
@@ -47,7 +49,30 @@ ruby scripts/mv.rb --project /absolute/project openapi:summary
 
 `fonts:list` scans installed macOS TTF/OTF files. Just before rendering, `fonts:copy[config/fonts.json]` copies a JSON mapping of project filenames to absolute source paths into the video's `tools/graphics/fonts/`. Run with `--project /absolute/video-workspace`; see [Project fonts](animation-audio-vfx.md#project-fonts). Setup does not fetch fonts.
 
-## New run configuration
+## Native scenes, previews and finals (default workflow)
+
+The step-by-step process is in [native-workflow.md](native-workflow.md); the recipes are in [scene-cookbook.md](scene-cookbook.md).
+
+```sh
+cd /absolute/project && ruby scenes/video.rb      # the scene generator: writes scenes/video.json + scenes/video.events.json
+AUDIO=audio/excerpt.wav ruby scripts/mv.rb --project /absolute/project 'graphics:preview[scenes/video.json,output/preview.mp4,0,10]'
+ONLY=600,601 ruby scripts/mv.rb --project /absolute/project 'graphics:render[scenes/video.json,output/stills,1800,1920,1080,60]'
+JOBS=8 AUDIO=audio/excerpt.wav SUPERSAMPLE=2 BITRATE=15000000 ruby scripts/mv.rb --project /absolute/project 'graphics:render[scenes/video.json,output/video_clean.mp4,1800,1920,1080,60]'
+FROM=1440 SUPERSAMPLE=2 ruby scripts/mv.rb --project /absolute/project 'graphics:benchmark[scenes/video.json,48,1920,1080,60]'
+cd /absolute/project && ruby scenes/finish_cues.rb output/video_clean.mp4
+```
+
+- `graphics:preview[scene,out,from_s,to_s]` renders a draft at 1× and 30 fps, with the `AUDIO` cut to the range.
+  `FPS`/`SUPERSAMPLE`/`WIDTH`/`HEIGHT`/`JOBS`/`GLOW` override the defaults.
+- `graphics:render[scene,out,frames,width,height,fps]`:
+  - takes `frames` as video seconds × fps;
+  - writes a PNG directory when `out` has no movie extension (with `ONLY`, only the listed frames);
+  - accepts `PLATE`, `AUDIO`, `CODEC=prores4444` (`.mov` with alpha), `SUPERSAMPLE`, `BITRATE`, `GLOW=gpu|cg` and `JOBS` (parallel chunks).
+- `graphics:benchmark` reports fps without writing files.
+- The scene generator and `finish_cues.rb` are plain Ruby scripts inside the project. They only write JSON/YAML; rendering still goes
+  through `mv.rb`.
+
+## New run configuration (optional Fal character path)
 
 When regenerating a video with approved character sheets and their original Fal manifests, register those identities locally without uploading again:
 
@@ -131,7 +156,7 @@ Example `04_clips.yml`:
 
 `audio_at` is section-local, not the whole-song time. Omit `gate` if it damages consonants. `box: [x,y,w,h]`, `seed: [x,y]`, `frames`, `start`, `scale` are cutout options. Use the approved full prompt directive, style and performance details in real files; these abbreviated examples only show the schema.
 
-## Production and review commands
+## Production and review commands (optional Fal character path)
 
 ```sh
 NOTE='User approved the linked plan and its generation allowance' ruby scripts/mv.rb --project /absolute/project plan:approve

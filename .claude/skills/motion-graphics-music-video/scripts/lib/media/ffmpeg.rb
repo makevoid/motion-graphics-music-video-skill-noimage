@@ -146,18 +146,77 @@ module Media
       out
     end
 
-    # Twitter/X upload: the same fill-crop and BT.601 -> BT.709 conversion as youtube_4k, at 1920x1080 (1928x1076 -> 1935x1080, 7-8px
-    # cropped per side). x264 high@4.2, CRF capped at ~13 Mbps (X re-encodes; a clean, not huge, source survives best), 1s GOPs,
-    # faststart; the audio is copied.
-    def twitter_1080(video, out, crf: 17, maxrate: "13M")
-      scale = "scale=1935:1080:flags=lanczos+accurate_rnd+full_chroma_int:in_color_matrix=bt601:out_color_matrix=bt709:" \
-              "in_range=tv:out_range=tv,crop=1920:1080,setsar=1,format=yuv420p"
-      run("ffmpeg", "-y", "-v", "error", "-i", video, "-vf", scale, "-c:v", "libx264", "-preset", "slow", "-crf", crf.to_s,
-          "-maxrate", maxrate, "-bufsize", "26M", "-profile:v", "high", "-level:v", "4.2", "-tune", "animation", "-g", "24", "-bf", "2",
+    # Lossless upload copy: every stream copied as-is and the moov index moved to the front (faststart), so a platform can start
+    # processing/playing before the whole file arrives. For masters already in platform spec (H.264 high, yuv420p, BT.709, AAC).
+    def faststart(video, out)
+      raise ArgumentError, "#{out} exists; choose a new name" if File.exist?(out)
+      run("ffmpeg", "-v", "error", "-i", video, "-map", "0", "-c", "copy", "-movflags", "+faststart", out)
+      out
+    end
+
+    # X (Twitter) upload rules: MP4 with H.264 High + AAC-LC, yuv420p, progressive, square pixels, closed GOPs, <= 60 fps, <= 25 Mb/s,
+    # 16:9 1920x1080, 9:16 1080x1920 or 1:1 1080x1080 at most. Free accounts: 140 s / 512 MB. Premium: 4 h / 16 GB on web and iOS
+    # (Android uploads stop at 10 min).
+    X_LIMITS = { fps: 60, mbps: 25, free_s: 140, free_mb: 512, premium_s: 4 * 3600, premium_mb: 16_384 }.freeze
+
+    # Generic X/Twitter upload encode for any source. Fits the picture inside the 16:9 / 9:16 / 1:1 box for its orientation without
+    # upscaling; a source within 1% of 16:9 or 9:16 (e.g. 1928x1076 model clips) is fill-cropped to the exact ratio. Interlaced
+    # sources are deinterlaced, fps above 60 is capped at 60, other rates are kept. Colour: BT.709-tagged sources pass through,
+    # untagged/BT.601 ones are converted (swscale "auto" input matrix) and the output is tagged BT.709 limited range.
+    # x264 High@4.2, CRF quality with a VBV cap of max_mbps (X's maximum is 25), closed 1 s GOPs, faststart.
+    # Audio: AAC-LC mono/stereo at 44.1/48 kHz is copied untouched; anything else becomes AAC-LC 48 kHz stereo 256 kb/s.
+    # Returns the result's specs, bitrate and whether it fits the free and Premium limits.
+    def twitter(video, out, crf: 16, max_mbps: 24, tune: nil)
+      raise ArgumentError, "#{out} exists; choose a new name" if File.exist?(out)
+      raise ArgumentError, "max_mbps must be <= #{X_LIMITS[:mbps]}" if max_mbps > X_LIMITS[:mbps]
+      info = probe(video)
+      v = info["streams"].find { |s| s["codec_type"] == "video" } or raise ArgumentError, "#{video} has no video stream"
+      a = info["streams"].find { |s| s["codec_type"] == "audio" }
+      w, h = v["width"], v["height"]
+      if (m = v["sample_aspect_ratio"].to_s.match(/\A(\d+):(\d+)\z/)) && m[1].to_i.positive? && m[1] != m[2]
+        w = (w * m[1].to_f / m[2].to_i).round # anamorphic: work in display pixels
+      end
+      rotation = Array(v["side_data_list"]).filter_map { |d| d["rotation"] }.first.to_i
+      w, h = h, w if rotation.abs % 180 == 90 # phone video: ffmpeg autorotates on decode
+      rate = fps(v["avg_frame_rate"])
+      rate = fps(v["r_frame_rate"]) unless rate.positive?
+      even = ->(x) { [(x / 2.0).floor * 2, 2].max }
+      square = (w - h).abs <= [w, h].max * 0.02
+      bw, bh = square ? [1080, 1080] : (w > h ? [1920, 1080] : [1080, 1920])
+      flags = "flags=lanczos+accurate_rnd+full_chroma_int:out_color_matrix=bt709:out_range=tv"
+      ratio = bw.fdiv(bh)
+      filters = []
+      filters << "bwdif=mode=send_frame" if %w[tt bb tb bt].include?(v["field_order"])
+      if !square && (w.fdiv(h) / ratio - 1).abs < 0.01
+        th = [h, bh].min * (w.fdiv(h) < ratio ? w.fdiv(h) / ratio : 1) # cover-scale + crop to the exact ratio
+        th = th >= bh * 0.99 ? bh : even.(th)                            # within 1% of the box: snap to it (a <1% upscale)
+        tw = even.(th * ratio)
+        filters << "scale=#{tw}:#{th}:force_original_aspect_ratio=increase:force_divisible_by=2:#{flags}" << "crop=#{tw}:#{th}"
+      else
+        s = [1.0, bw.fdiv(w), bh.fdiv(h)].min
+        tw, th = even.(w * s), even.(h * s)
+        filters << "scale=#{tw}:#{th}:#{flags}"
+      end
+      filters << "fps=#{X_LIMITS[:fps]}" if rate > X_LIMITS[:fps]
+      filters << "setsar=1" << "format=yuv420p"
+      gop = [[rate, X_LIMITS[:fps]].min.round, 1].max
+      copy_audio = a && a["codec_name"] == "aac" && a["profile"] == "LC" && a["channels"].to_i <= 2 && [44_100, 48_000].include?(a["sample_rate"].to_i)
+      audio = if a.nil? then ["-an"]
+              elsif copy_audio then ["-map", "0:a:0", "-c:a", "copy"]
+              else ["-map", "0:a:0", "-c:a", "aac", "-profile:a", "aac_low", "-b:a", "256k", "-ar", "48000", "-ac", "2"]
+              end
+      run("ffmpeg", "-v", "error", "-i", video, "-map", "0:v:0", *audio, "-vf", filters.join(","),
+          "-c:v", "libx264", "-preset", "slow", *(["-tune", tune] if tune), "-crf", crf.to_s,
+          "-maxrate", format("%gM", max_mbps), "-bufsize", format("%gM", max_mbps * 2), "-profile:v", "high", "-level:v", "4.2",
+          "-g", gop.to_s, "-keyint_min", gop.to_s, "-bf", "2", "-flags", "+cgop",
           "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv",
           "-bsf:v", "h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1:video_full_range_flag=0",
-          "-c:a", "copy", "-movflags", "+faststart", out)
-      out
+          "-map_metadata", "-1", "-movflags", "+faststart", out)
+      res = summary(out)
+      mbps = (File.size(out) * 8 / res[:duration] / 1e6).round(2)
+      res.merge(path: out, mbps: mbps, audio_copied: copy_audio || false,
+                fits_free: res[:duration] <= X_LIMITS[:free_s] && res[:size_mb] <= X_LIMITS[:free_mb],
+                fits_premium: res[:duration] <= X_LIMITS[:premium_s] && res[:size_mb] <= X_LIMITS[:premium_mb])
     end
 
     # Frame number n of `video` as a still.

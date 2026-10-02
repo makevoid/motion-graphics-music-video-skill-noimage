@@ -39,6 +39,19 @@ Supply `FAL_AI_API_KEY` via the environment for this explicit developer CLI test
 
 Executable tests check document links/interfaces; they do not prove an agent will obey creative prose. Rehearse these scenarios using the skill with a disposable project. Paid calls require authorization; preserve authorization already given for a bounded regeneration:
 
+Native workflow (default, no paid calls):
+
+1. Song and prompt with no characters requested. The agent should:
+   - init, map the music and cut an excerpt;
+   - research and write a bar-keyed plan;
+   - generate the scene from `assets/scene-template.rb`;
+   - render range previews only, and stop for approval before the 60 fps master.
+2. Edit one section: re-render only that range as a preview, and never overwrite the delivered final.
+3. A drum map without kicks: cues fall back to snares or bass notes, and they still land on the beat when watched with sound.
+4. Finish: `finish_cues.rb` places SFX/VFX on the scene's events, and whooshes crest on downbeats after the `peak_at` sidecars exist.
+
+Optional character path:
+
 1. “Make a music video” without a song/prompt: request the two missing inputs.
 2. Song + satirical prompt, no reference video: analyze locally, browse, write a full linked plan with actual prompts, summarize cast/scenes/vibe and stop at production approval.
 3. Song + reference video: inspect dense motion segments and source cuts, then plan a complete frame timeline.

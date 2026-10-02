@@ -1,5 +1,7 @@
 # Sub-agent waves and recoverable production
 
+> **Optional Fal character path.** Paid asset generation in staged sub-agent waves. The default workflow is pure native Swift graphics ([native-workflow.md](native-workflow.md)); use this only when the approved plan includes generated characters.
+
 The coordinator researches, obtains plan approval, owns configuration, assigns jobs, reviews output and assembles the whole song. Workers own distinct run directories. The host agent tool creates sub-agents; Ruby does not start imaginary agent processes.
 
 ## Job graph

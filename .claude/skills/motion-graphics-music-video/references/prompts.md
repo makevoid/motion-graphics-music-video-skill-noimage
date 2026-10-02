@@ -1,5 +1,7 @@
 # Character, image-edit and H3 prompts
 
+> **Optional Fal character path.** Prompts for GPT Image 2.5 character sheets and MiniMax H3 animation. The default workflow is pure native Swift graphics ([native-workflow.md](native-workflow.md)); use this only when the approved plan includes generated characters.
+
 Use this creative directive in each character/scene/H3 prompt and sub-agent brief, followed by specific visual instructions:
 
 > This asset belongs to a hyper quality, very interesting and potentially very fun viral music video. Deliver polished visual detail and expressive character animation, with surprising, relevant ideas from the researched creative plan. The overall video defaults to energetic, chaotic choreography that constantly hooks attention while keeping its main action readable.

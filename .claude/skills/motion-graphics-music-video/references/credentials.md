@@ -1,5 +1,7 @@
 # Fal credentials and plugin execution
 
+Only the optional character path needs a Fal key; the native workflow ([native-workflow.md](native-workflow.md)) runs fully offline.
+
 The plugin declares an optional sensitive `FAL_AI_API_KEY` option. Claude Code collects and stores it in secure credential storage, then injects it into the `music-video` MCP server's environment as `FAL_AI_API_KEY_PLUGIN`. When that value is empty the server uses `FAL_AI_API_KEY` from the environment Claude Code was launched in. The option is optional so the server starts, and `credential_status` can report a missing key, instead of Claude Code dropping the server. The model does not receive the value. Configure it through the plugin's configuration interface, never through chat or a command argument. Restart/reconnect the MCP server after changing the key.
 
 The server is `scripts/mcp.rb`, a Ruby stdio process using standard libraries. It starts before project dependencies are installed. Its tools delegate to `scripts/mv.rb`; Ruby remains the execution layer. No key is read from the user's home directory or written to project files. Only initialize and execute projects the user trusts: the toolkit intentionally loads the project's Ruby configuration and Rakefile.

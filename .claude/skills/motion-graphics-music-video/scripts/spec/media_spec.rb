@@ -122,4 +122,36 @@ RSpec.describe "Local media end to end", :media do
     expect(diff.call(57_600, 4_800)).to be > diff.call(4_800, 4_800) * 3
     expect { Media::Graphics.new.synth(file("bad.wav"), { "synth" => "kazoo" }) }.to raise_error(Media::CommandError, /synth must be one of/)
   end
+  it "encodes any source to X/Twitter upload spec through the public task" do
+    src = file("x_src.mov")
+    ff.run("ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=1928x1076:r=30:d=2", "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+           "-c:v", "libx264", "-pix_fmt", "yuv444p", "-c:a", "pcm_s16le", "-ar", "44100", src)
+    out = file("x_out.mp4")
+    FileUtils.rm_f(out)
+    stdout, err, status = cli("media:twitter[#{src},#{out}]")
+    expect(status.exitstatus).to eq(0), err
+    res = JSON.parse(stdout[stdout.index("{")..])
+    expect(res).to include("fits_free" => true, "fits_premium" => true, "audio_copied" => false)
+    info = ff.probe(out)
+    v = info["streams"].find { |st| st["codec_type"] == "video" }
+    a = info["streams"].find { |st| st["codec_type"] == "audio" }
+    expect(v.values_at("codec_name", "profile", "pix_fmt", "width", "height", "color_space", "color_primaries", "color_transfer", "color_range"))
+      .to eq(["h264", "High", "yuv420p", 1920, 1080, "bt709", "bt709", "bt709", "tv"])
+    expect(a.values_at("codec_name", "profile", "sample_rate", "channels")).to eq(["aac", "LC", "48000", 2])
+    keys = ff.run("ffprobe", "-v", "error", "-select_streams", "v", "-skip_frame", "nokey", "-show_entries", "frame=pts_time", "-of", "csv=p=0", out, quiet: true)
+    expect(keys.split.map(&:to_f)).to eq([0.0, 1.0])
+    bytes = File.binread(out)
+    expect(bytes.index("moov")).to be < bytes.index("mdat")
+    _, err, status = cli("media:twitter[#{src},#{out}]")
+    expect(status.exitstatus).not_to eq(0)
+    expect(err).to match(/exists/)
+
+    tall = file("x_tall.mp4")
+    ff.run("ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=360x640:r=120:d=1", "-c:v", "libx264", tall)
+    out2 = file("x_tall_out.mp4")
+    FileUtils.rm_f(out2)
+    res2 = ff.twitter(tall, out2)
+    expect(res2[:video]).to include(w: 360, h: 640, fps: 60.0)
+    expect(res2).not_to have_key(:audio)
+  end
 end

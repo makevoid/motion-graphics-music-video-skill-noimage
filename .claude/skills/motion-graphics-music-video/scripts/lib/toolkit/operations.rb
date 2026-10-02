@@ -58,7 +58,8 @@ module Toolkit
       "media:mux" => "Replace audio [video,audio,out.mp4]",
       "media:preview" => "Join contiguous sections with unbroken song [out.mp4,s01,s02,...]",
       "media:youtube" => "4K delivery [video,out.mp4] (local encode only)",
-      "media:twitter" => "1080p delivery [video,out.mp4] (local encode only)",
+      "media:twitter" => "X/Twitter upload encode for any video [video,out.mp4]: fit 16:9/9:16/1:1 box, <=60 fps, H.264 High yuv420p BT.709, closed 1 s GOPs, AAC-LC, faststart; CRF (16), MAX_MBPS (24, X max 25), TUNE (e.g. animation) optional; reports free/Premium fit",
+      "media:faststart" => "Lossless upload copy [video,out.mp4]: streams copied, moov moved to the front (no re-encode)",
       "media:upload" => "Upload [path] to Fal CDN",
       "ref:import" => "Reuse existing hosted identity [new_run,local_image,original_manifest.json] (no upload)",
       "vfx:build" => "Build Swift Core Image renderer (macOS)",
@@ -163,7 +164,10 @@ module Toolkit
       when "media:mux" then required(a, 3); emit ff.mux(*a, shortest: false)
       when "media:preview" then required(a, 2); emit preview(a[0], a.drop(1))
       when "media:youtube" then required(a, 2); emit ff.youtube_4k(*a)
-      when "media:twitter" then required(a, 2); emit ff.twitter_1080(*a)
+      when "media:twitter"
+        required(a, 2)
+        emit ff.twitter(*a, crf: Float(ENV["CRF"] || 16), max_mbps: Float(ENV["MAX_MBPS"] || 24), tune: ENV["TUNE"])
+      when "media:faststart" then required(a, 2); emit ff.faststart(*a)
       when "media:upload" then required(a, 1); emit(url: Fal::Client.new.upload(a[0]))
       when "ref:import" then required(a, 3); emit Pipeline::ReferenceImporter.new.import(run: a[0], image: a[1], manifest: a[2])
       when "vfx:build" then emit Media::Vfx.new.build
