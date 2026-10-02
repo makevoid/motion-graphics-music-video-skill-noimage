@@ -164,6 +164,11 @@ public final class RingsNode: Node {
     public init(count: Int, radius: Double, spacing: Double, sides: Int = 0, name: String = "") {
         self.count = max(1,count); self.radius = max(0,radius); self.spacing = spacing; self.sides = sides; super.init(name:name)
     }
+public override func contentBounds(at time: FrameTime) -> CGRect? {
+    let t = time.seconds, gap = tracks["spacing"]?.value(at:t) ?? spacing, width = tracks["strokeWidth"]?.value(at:t) ?? lineWidth
+    let r = max(radius,radius+Double(count)*gap)+boil+width*5+1, ry = r*abs(aspect)+width*5+1
+    return CGRect(x:-r,y:-ry,width:2*r,height:2*ry)
+}
     public override func draw(on canvas: Canvas, at time: FrameTime) {
         let t = time.seconds
         let phase = tracks["phase"]?.value(at:t) ?? 0, tw = tracks["twist"]?.value(at:t) ?? twist

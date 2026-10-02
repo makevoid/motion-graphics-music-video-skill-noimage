@@ -17,6 +17,18 @@ ruby scripts/mv.rb 'graphics:build'
 ruby scripts/mv.rb 'graphics:render[tools/graphics/examples/futuristic.json,output/native.mp4,192,1920,1080,24]'
 ```
 
+**Preview first, final last.** Every creation or edit iteration renders a draft of only the affected time range with `graphics:preview` —
+1× (no supersampling), 30 fps, roughly 4–6× faster than a final — and the soundtrack cut to that range:
+
+```sh
+AUDIO=audio/excerpt.wav ruby scripts/mv.rb --project /abs/project 'graphics:preview[scenes/video.json,output/preview.mp4,0,10]'   # seconds 0-10
+```
+
+Use `ONLY=` stills of `graphics:render` for single-frame checks. Render the final (`graphics:render` with `SUPERSAMPLE=2`, the delivery frame
+rate and `BITRATE`, then the SFX/VFX finish) only when the user approves the previews or asks for the final; never re-render a delivered final
+over itself — use a new output name.
+Rendering runs on the GPU by default (neon halos, shader nodes; see the graphics README); `GLOW=cg` restores the Core Graphics shadows for an A/B check.
+
 `PLATE=plate.mp4` composes over a source video and inherits its audio. `AUDIO=song.m4a` replaces audio. `CODEC=prores4444` with a `.mov` output preserves alpha; H.264/HEVC are opaque. Scene JSON paths are relative to the scene file. Font files register once through the scene's `fonts` array; text uses the registered PostScript font name. Choose assets, colors and typography to suit the approved direction; the futuristic examples are optional demonstrations.
 
 ### Project fonts

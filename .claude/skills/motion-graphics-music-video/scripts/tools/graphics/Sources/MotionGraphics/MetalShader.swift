@@ -49,8 +49,20 @@ public final class MetalShader {
     }
     /// Runs a generator kernel (one that ignores `src`, e.g. procedural gas or stars) and returns its picture.
     public func generate(_ function: String, params: [Float]) throws -> CGImage { try run(function,input:nil,params:params) }
+    /// Runs a generator kernel and returns the output texture itself (linear, premultiplied, row 0 = top): no readback. It is
+    /// shared, so use it before the next run.
+    public func generateTexture(_ function: String, params: [Float]) throws -> MTLTexture { try encode(function,input:nil,params:params); return output }
 
     private func run(_ function: String, input image: CIImage?, params: [Float]) throws -> CGImage {
+        try encode(function,input:image,params:params)
+        let w = input.width, h = input.height, bounds = CGRect(x:0,y:0,width:w,height:h)
+        let flip = CGAffineTransform(scaleX:1,y:-1).translatedBy(x:0,y:-CGFloat(h))
+        guard let wrapped = CIImage(mtlTexture:output,options:[.colorSpace:space]) else { throw GraphicsError.io("Cannot wrap shader output") }
+        // Materialize now: the next pass reuses `output`.
+        guard let cg = context.createCGImage(wrapped.transformed(by:flip),from:bounds,format:.RGBAh,colorSpace:space) else { throw GraphicsError.io("Shader readback failed") }
+        return cg
+    }
+    private func encode(_ function: String, input image: CIImage?, params: [Float]) throws {
         guard let pipeline = pipelines[function] else { throw GraphicsError.invalid("Unknown shader \(function)") }
         guard params.count <= 24 else { throw GraphicsError.invalid("Shader params are at most 24 floats") }
         guard let command = queue.makeCommandBuffer() else { throw GraphicsError.unavailable("Metal command failed") }
@@ -66,9 +78,5 @@ public final class MetalShader {
         encoder.dispatchThreads(MTLSize(width:w,height:h,depth:1),threadsPerThreadgroup:MTLSize(width:tw,height:th,depth:1))
         encoder.endEncoding(); command.commit(); command.waitUntilCompleted()
         if let error = command.error { throw error }
-        guard let wrapped = CIImage(mtlTexture:output,options:[.colorSpace:space]) else { throw GraphicsError.io("Cannot wrap shader output") }
-        // Materialize now: the next pass reuses `output`.
-        guard let cg = context.createCGImage(wrapped.transformed(by:flip),from:bounds,format:.RGBAh,colorSpace:space) else { throw GraphicsError.io("Shader readback failed") }
-        return cg
     }
 }

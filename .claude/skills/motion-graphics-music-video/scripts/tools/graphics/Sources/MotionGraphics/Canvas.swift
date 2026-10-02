@@ -1,5 +1,7 @@
 import Foundation
 import CoreGraphics
+import CoreImage
+import Metal
 import CoreText
 import ImageIO
 import UniformTypeIdentifiers
@@ -30,26 +32,49 @@ public final class Canvas {
     public var glow = 0.0, glowCore = 0.0
     /// Device pixels per scene unit (supersampling); glow radii are scaled by it so the look holds at any render size.
     public let pixelScale: Double
-    private var stack: [(Style, Projection?, Double, Double)] = []
+    /// GPU rendering (`gpu: true`). Neon (see GlowLayers): halos are blurred once per frame on the GPU instead of per mark on the CPU;
+    /// composite `glowImage()` over the snapshot. nil = Core Graphics shadows.
+    public let glowLayers: GlowLayers?
+    /// The pixels in a Metal buffer, so shader nodes blend into the frame on the GPU (see composite(_:in:)); nil = plain bitmap.
+    let gpu: CanvasGPU?
+    /// Inherited group opacity, whether marks occlude (false under a non-normal blend mode) and how many transparency layers are
+    /// open; the GPU paths use them to tell when they can stand in for Core Graphics.
+    public var opacity = 1.0, occludes = true, layerDepth = 0
+    private var clips: [GlowLayers.Clip] = []
+    var activeClips: [GlowLayers.Clip] { clips }
+    private struct Saved { let style: Style, projection: Projection?, glow, glowCore, opacity: Double, occludes: Bool, layerDepth, clips: Int }
+    private var stack: [Saved] = []
     /// `supersample` draws at N× the size in device pixels (scene coordinates unchanged); downscale the snapshot for output.
-    public init(width: Int, height: Int, supersample: Int = 1) throws {
+    /// `gpu` moves neon halos and shader pictures to the GPU (falls back to Core Graphics without Metal).
+    public init(width: Int, height: Int, supersample: Int = 1, gpu: Bool = false) throws {
         guard width > 0, height > 0, width <= 16384, height <= 16384 else { throw GraphicsError.invalid("Canvas dimensions must be 1...16384") }
         guard (1...4).contains(supersample) else { throw GraphicsError.invalid("supersample must be 1...4") }
         self.width = width; self.height = height; pixelScale = Double(supersample)
         let pw = width*supersample, ph = height*supersample
-        guard let c = CGContext(data: nil, width: pw, height: ph, bitsPerComponent: 8, bytesPerRow: pw*4,
+        self.gpu = gpu ? CanvasGPU(width:pw,height:ph) : nil
+        guard let c = CGContext(data: self.gpu?.memory, width: pw, height: ph, bitsPerComponent: 8, bytesPerRow: self.gpu?.bytesPerRow ?? pw*4,
                                 space: Color.space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
             throw GraphicsError.unavailable("Could not allocate drawing surface")
         }
         context = c
+        glowLayers = gpu ? try GlowLayers(width:width,height:height,pixelScale:Double(supersample)) : nil
         c.translateBy(x: 0, y: CGFloat(ph)); c.scaleBy(x: CGFloat(supersample), y: -CGFloat(supersample))
     }
     public func clear(_ color: Color = .clear) {
         context.saveGState(); context.setBlendMode(.copy); context.setFillColor(color.cgColor)
         context.fill(CGRect(x:0,y:0,width:width,height:height)); context.restoreGState()
+        glowLayers?.reset()
     }
-    public func push() { stack.append((style,projection,glow,glowCore)); context.saveGState() }
-    public func pop() { precondition(!stack.isEmpty, "Unbalanced Canvas.pop"); (style,projection,glow,glowCore) = stack.removeLast(); context.restoreGState() }
+    public func push() {
+        stack.append(Saved(style:style,projection:projection,glow:glow,glowCore:glowCore,opacity:opacity,occludes:occludes,layerDepth:layerDepth,clips:clips.count))
+        context.saveGState()
+    }
+    public func pop() {
+        precondition(!stack.isEmpty, "Unbalanced Canvas.pop")
+        let s = stack.removeLast()
+        (style,projection,glow,glowCore,opacity,occludes,layerDepth) = (s.style,s.projection,s.glow,s.glowCore,s.opacity,s.occludes,s.layerDepth)
+        clips.removeLast(clips.count-s.clips); context.restoreGState()
+    }
     public func withState(_ body: (Canvas) throws -> Void) rethrows { push(); defer { pop() }; try body(self) }
     public func translate(_ x: Double, _ y: Double) { context.translateBy(x:x,y:y) }
     public func rotate(_ radians: Double) { context.rotate(by:radians) }
@@ -58,8 +83,14 @@ public final class Canvas {
     public func shear(_ x: Double, _ y: Double) { transform(CGAffineTransform(a:1,b:tan(y),c:tan(x),d:1,tx:0,ty:0)) }
     public func clip(_ path: Path, evenOdd: Bool = false) {
         var shape = path
-        if let projection { guard let (p,_) = projection.project(path,ctm:context.ctm) else { context.clip(to:.zero); return }; shape = p }
+        if let projection {
+            guard let (p,_) = projection.project(path,ctm:context.ctm) else {
+                context.clip(to:.zero); if glowLayers != nil { clips.append((CGPath(rect:.zero,transform:nil),.identity,false)) }; return
+            }
+            shape = p
+        }
         context.addPath(shape.cgPath); context.clip(using: evenOdd ? .evenOdd : .winding)
+        if glowLayers != nil { clips.append((shape.cgPath,context.ctm,evenOdd)) }
     }
     public func draw(_ path: Path) {
         let c = context
@@ -84,6 +115,24 @@ public final class Canvas {
         let mode: CGPathDrawingMode? = style.fill != nil && style.stroke != nil ? (style.evenOdd ? .eoFillStroke : .fillStroke)
             : style.fill != nil ? (style.evenOdd ? .eoFill : .fill) : style.stroke != nil ? .stroke : nil
         guard let mode else { c.beginPath(); return }
+        if let layers = glowLayers {
+            let path = shape.cgPath, ctm = c.ctm, lw = width, cap = style.lineCap, join = style.lineJoin, phase = style.dashPhase
+            func line(_ g: CGContext, _ w: Double) { g.setLineWidth(w); g.setLineCap(cap); g.setLineJoin(join); g.setLineDash(phase:phase,lengths:dash) }
+            if let halo {
+                // Wide halo from the outline fattened by 0.6 glow (dots: plus a 0.6 glow ring), then a tight one from the mark itself.
+                let k = GlowLayers.sigmaPerShadowBlur*pixelScale, fat = style.stroke != nil ? width+glow*0.6 : glow*0.6, filled = style.fill != nil
+                layers.halo(sigma:glow*1.6*k,color:halo,alpha:halo.a*0.8*opacity,ctm:ctm,clips:clips) { g in
+                    g.addPath(path); line(g,fat); g.setLineCap(.round); g.setLineJoin(.round); g.drawPath(using:filled ? .fillStroke : .stroke)
+                }
+                layers.halo(sigma:glow*0.35*k,color:halo,alpha:halo.a*opacity,ctm:ctm,clips:clips) { g in g.addPath(path); line(g,lw); g.drawPath(using:mode) }
+            } else if occludes {
+                let fill = style.fill?.a ?? 0, stroke = style.stroke?.a ?? 0
+                layers.knockout(alpha:opacity,ctm:ctm,clips:clips) { g in
+                    g.setFillColor(Color(0,0,0,fill).cgColor); g.setStrokeColor(Color(0,0,0,stroke).cgColor); g.addPath(path); line(g,lw); g.drawPath(using:mode)
+                }
+            }
+            c.drawPath(using:mode); core(shape,width:width); return
+        }
         guard let halo else { c.drawPath(using:mode); return }
         c.beginPath()
         // Neon: a thin tube carries too little light for a shadow to read, so the wide halo is cast from a fattened copy of the
@@ -108,11 +157,14 @@ public final class Canvas {
         c.setShadow(offset:.zero,blur:CGFloat(glow*0.35*pixelScale),color:halo.cgColor)
         c.addPath(shape.cgPath); c.drawPath(using:mode)
         c.setShadow(offset:.zero,blur:0,color:nil)
-        if glowCore > 0, let s = style.stroke {
-            let k = min(1,glowCore)*0.65
-            c.addPath(shape.cgPath); c.setLineWidth(width*0.45)
-            c.setStrokeColor(Color(s.r+(1-s.r)*k,s.g+(1-s.g)*k,s.b+(1-s.b)*k,s.a).cgColor); c.strokePath()
-        }
+        core(shape,width:width)
+    }
+    /// The hot, whitened core over a glowing stroke (glowCore).
+    private func core(_ shape: Path, width: Double) {
+        guard glow > 0, glowCore > 0, let s = style.stroke, s.glows else { return }
+        let k = min(1,glowCore)*0.65
+        context.addPath(shape.cgPath); context.setLineWidth(width*0.45)
+        context.setStrokeColor(Color(s.r+(1-s.r)*k,s.g+(1-s.g)*k,s.b+(1-s.b)*k,s.a).cgColor); context.strokePath()
     }
     public func rect(_ x: Double, _ y: Double, _ w: Double, _ h: Double, radius: Double = 0) { draw(.rect(CGRect(x:x,y:y,width:w,height:h), radius:radius)) }
     public func square(_ x: Double, _ y: Double, _ size: Double) { rect(x,y,size,size) }
@@ -123,10 +175,14 @@ public final class Canvas {
     public func triangle(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint) { draw(.polygon([a,b,c])) }
     public func quad(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint, _ d: CGPoint) { draw(.polygon([a,b,c,d])) }
     public func image(_ image: CGImage, in rect: CGRect) {
-        context.saveGState(); context.translateBy(x:rect.minX,y:rect.maxY); context.scaleBy(x:1,y:-1)
-        context.draw(image,in:CGRect(origin:.zero,size:rect.size)); context.restoreGState()
+        func paint(_ g: CGContext) { g.translateBy(x:rect.minX,y:rect.maxY); g.scaleBy(x:1,y:-1); g.draw(image,in:CGRect(origin:.zero,size:rect.size)) }
+        if occludes { glowLayers?.knockout(alpha:opacity,ctm:context.ctm,clips:clips,paint) }
+        context.saveGState(); paint(context); context.restoreGState()
     }
     public func gradient(_ gradient: Gradient, in path: Path) {
+        if occludes, projection == nil {
+            glowLayers?.knockout(alpha:opacity,ctm:context.ctm,clips:clips) { g in g.setFillColor(Color.black.cgColor); g.addPath(path.cgPath); g.fillPath() }
+        }
         withState { c in
             c.clip(path)
             switch gradient.kind {
@@ -135,6 +191,27 @@ public final class Canvas {
             }
         }
     }
+    /// Blends a GPU picture (linear, premultiplied; texel row 0 = its top) over `rect` in user space, like image(_:in:) — on the GPU,
+    /// straight into the pixels. False when that can't stand in for Core Graphics here (no GPU buffer, inside a transparency layer,
+    /// clipped, projected or blended); then draw a CGImage instead.
+    func composite(_ texture: MTLTexture, in rect: CGRect) throws -> Bool {
+        guard let gpu, layerDepth == 0, clips.isEmpty, projection == nil, occludes, rect.width > 0, rect.height > 0 else { return false }
+        let ctm = context.ctm, ph = CGFloat(gpu.height)
+        // buffer px (row 0 = top) -> device (y up) -> user -> texel
+        let flip = CGAffineTransform(a:1,b:0,c:0,d:-1,tx:0,ty:ph)
+        let toTexel = flip.concatenating(ctm.inverted()).concatenating(CGAffineTransform(translationX:-rect.minX,y:-rect.minY))
+            .concatenating(CGAffineTransform(scaleX:CGFloat(texture.width)/rect.width,y:CGFloat(texture.height)/rect.height))
+        // Bilinear sampling aliases when minifying (Core Graphics filters): shrunk pictures go through the CGImage path.
+    guard abs(toTexel.a*toTexel.d-toTexel.b*toTexel.c) <= 2 else { return false }
+    let box = rect.applying(ctm).applying(flip).intersection(CGRect(x:0,y:0,width:gpu.width,height:gpu.height))
+        guard !box.isNull, !box.isEmpty else { return true }
+        let x0 = Int(box.minX.rounded(.down)), y0 = Int(box.minY.rounded(.down))
+        context.flush()
+        try gpu.composite(texture,toTexel:toTexel,region:(x0,y0,Int(box.maxX.rounded(.up))-x0,Int(box.maxY.rounded(.up))-y0),opacity:opacity)
+        return true
+    }
+    /// GPU glow for this frame (raw sRGB values, output px); see GlowLayers.image().
+    public func glowImage() -> CIImage? { glowLayers?.image() }
     public func snapshot() throws -> CGImage {
         guard let image = context.makeImage() else { throw GraphicsError.io("Snapshot failed") }; return image
     }
@@ -220,11 +297,20 @@ public final class TextLayout {
             return
         }
         canvas.withState { c in
-            c.translate(point.x,point.y); c.scale(1,-1); c.context.textMatrix = .identity
-            c.context.textPosition = .zero; c.context.setFillColor(color.cgColor)
+            c.translate(point.x,point.y)
             // Small type glows; big poster words stay crisp (a halo on them reads as blur).
-            let cap = ascent*Double(hypot(c.context.ctm.a,c.context.ctm.b))/c.pixelScale
-            if c.glow > 0, color.glows, cap < 90 { c.context.setShadow(offset:.zero,blur:CGFloat(c.glow*0.7*c.pixelScale),color:color.cgColor) }
+            let cap = ascent*Double(hypot(c.context.ctm.a,c.context.ctm.b))/c.pixelScale, glows = c.glow > 0 && color.glows && cap < 90
+            if let layers = c.glowLayers {
+                let shape = outline.cgPath, ctm = c.context.ctm
+                if glows {
+                    layers.halo(sigma:c.glow*0.7*c.pixelScale*GlowLayers.sigmaPerShadowBlur,color:color,alpha:color.a*c.opacity,ctm:ctm,clips:c.activeClips) { g in g.addPath(shape); g.fillPath() }
+                } else if c.occludes {
+                    layers.knockout(alpha:c.opacity,ctm:ctm,clips:c.activeClips) { g in g.setFillColor(Color(0,0,0,color.a).cgColor); g.addPath(shape); g.fillPath() }
+                }
+            }
+            c.scale(1,-1); c.context.textMatrix = .identity
+            c.context.textPosition = .zero; c.context.setFillColor(color.cgColor)
+            if glows && c.glowLayers == nil { c.context.setShadow(offset:.zero,blur:CGFloat(c.glow*0.7*c.pixelScale),color:color.cgColor) }
             CTLineDraw(line,c.context)
         }
     }

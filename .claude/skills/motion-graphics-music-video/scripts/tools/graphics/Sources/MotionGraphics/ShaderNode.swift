@@ -41,9 +41,16 @@ public final class ShaderNode: Node {
             ? head + [Float(pulse),Float(twinkle),Float(seed),Float(stars),Float(tracks["beat"]?.value(at:t) ?? 1)]
             : head + [Float(tracks["reveal"]?.value(at:t) ?? reveal),Float(swirl),Float(seed),Float(detail),Float(filaments)])
             + lin(c[0]) + [Float(stars)] + lin(c[1]) + [Float(core)] + lin(c[2]) + [0]
-        do { canvas.image(try engine.generate(shader,params:params),in:CGRect(x:0,y:0,width:width,height:height)) }
+        let rect = CGRect(x:0,y:0,width:width,height:height)
+        do {
+            if canvas.gpu != nil, try canvas.composite(try engine.generateTexture(shader,params:params),in:rect) { return }
+            canvas.image(try engine.generate(shader,params:params),in:rect)
+        }
         catch { FileHandle.standardError.write(Data("shader \(shader): \(error)\n".utf8)) }
     }
+
+    public override func contentBounds(at time: FrameTime) -> CGRect? { CGRect(x:0,y:0,width:width,height:height) }
+    public override var paintsOnce: Bool { children.isEmpty }
 
     // a = (w, h, evolve, brightness)  b = (cx, cy, radius, reveal)  c = (swirl, seed, detail, filaments)
     // d = (colour0, stars)  e = (colour1, core)  f = (colour2, -). Output is emissive light, premultiplied, alpha = brightest channel.

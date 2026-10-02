@@ -42,16 +42,54 @@ open class Node {
             if let glowCore { c.glowCore = glowCore }
             // Isolated group opacity: overlapping children fade together, once.
             c.context.setBlendMode(blendMode); c.context.setAlpha(alpha)
-            let isolated = alpha < 1 || blendMode != .normal
-            if isolated { c.context.beginTransparencyLayer(auxiliaryInfo:nil) }
+            c.opacity *= alpha; if blendMode != .normal { c.occludes = false }
+            var isolated = (alpha < 1 && !paintsOnce) || blendMode != .normal
+            if isolated {
+                // A transparency layer costs its whole area (the full supersampled frame) to clear and composite; bound it to the subtree's
+                // box when that is known. Only with GPU glow: Core Graphics shadows would spill outside the box.
+                let m = c.context.ctm, s = sqrt(abs(m.a*m.d-m.b*m.c))
+                if c.glowLayers != nil, c.projection == nil, s > 1e-9, let box = localBounds(at:time) {
+                    guard !box.isNull else { isolated = false; return }
+                    c.context.beginTransparencyLayer(in:box.insetBy(dx:-3/s,dy:-3/s),auxiliaryInfo:nil)
+                } else { c.context.beginTransparencyLayer(auxiliaryInfo:nil) }
+                c.layerDepth += 1
+            }
             defer { if isolated { c.context.endTransparencyLayer() } }
             try draw(on:c,at:time)
             for child in children { try child.render(on:c,at:time) }
         }
     }
     open func draw(on canvas: Canvas, at time: FrameTime) throws {}
+    /// A conservative box around what draw(on:at:) paints, in local coordinates (.null = nothing); nil = unknown.
+    open func contentBounds(at time: FrameTime) -> CGRect? { nil }
+    /// True when draw(on:at:) paints a single mark and there are no children: group opacity then needs no isolated layer.
+    open var paintsOnce: Bool { false }
+    /// The node's transform at `time` (local -> parent coordinates), as render applies it.
+    public func transform(at time: FrameTime) -> CGAffineTransform {
+        func value(_ key: String, _ fallback: Double) -> Double { tracks[key]?.value(at:time.seconds) ?? fallback }
+        var t = CGAffineTransform(translationX:value("x",position.x),y:value("y",position.y))
+            .rotated(by:value("rotation",rotation)).scaledBy(x:value("scaleX",scale.x),y:value("scaleY",scale.y))
+        let sx = value("skewX",skewX), sy = value("skewY",skewY)
+        if sx != 0 || sy != 0 { t = CGAffineTransform(a:1,b:tan(sy),c:tan(sx),d:1,tx:0,ty:0).concatenating(t) }
+        return t.translatedBy(x:-anchor.x,y:-anchor.y)
+    }
+    /// Box of this node and its visible descendants in local coordinates at `time` (.null = paints nothing); nil when any part is
+    /// unknown (custom drawing, update closures).
+    public func localBounds(at time: FrameTime) -> CGRect? {
+        guard update == nil, var box = contentBounds(at:time) else { return nil }
+        for child in children {
+            guard !child.hidden, time.seconds >= child.start, time.seconds < child.end,
+                  (child.tracks["opacity"]?.value(at:time.seconds) ?? child.opacity) > 0 else { continue }
+            guard let b = child.localBounds(at:time) else { return nil }
+            if !b.isNull { box = box.union(b.applying(child.transform(at:time))) }
+        }
+        if let clip { box = box.intersection(clip.cgPath.boundingBoxOfPath) }
+        return box
+    }
 }
-public final class Group: Node {}
+public final class Group: Node {
+    public override func contentBounds(at time: FrameTime) -> CGRect? { .null }
+}
 /// Animatable tracks beyond the transform: trimStart, trimEnd (0...1 of the outline length; a partial outline
 /// is stroked only), strokeWidth, dashPhase. `boil` (px) redraws the vertices with seeded jitter `boilRate` times
 /// per second, like hand-drawn animation on twos/threes.
@@ -74,9 +112,14 @@ public final class ShapeNode: Node {
             shape = Path.trimmed(polylines,from:a,to:b,boil:boil,step:Int(floor(t*max(0.001,boilRate))),seed:boilSeed,wholeClosed:!partial)
             if partial { canvas.style.fill = nil }
         }
-        if let gradient, canvas.style.fill != nil { canvas.gradient(gradient,in:shape); canvas.style.fill = nil }
-        canvas.draw(shape)
-    }
+    if let gradient, canvas.style.fill != nil { canvas.gradient(gradient,in:shape); canvas.style.fill = nil }
+    canvas.draw(shape)
+}
+public override func contentBounds(at time: FrameTime) -> CGRect? {
+    let w = style.stroke == nil ? 0 : max(style.lineWidth,tracks["strokeWidth"]?.value(at:time.seconds) ?? 0)
+    let pad = w*(style.lineJoin == .miter ? 5 : 1)+boil*2+1
+    return path.cgPath.boundingBoxOfPath.insetBy(dx:-pad,dy:-pad)
+}
 }
 public final class TextNode: Node {
     public enum Alignment: String { case left, center, right }
@@ -90,8 +133,12 @@ public final class TextNode: Node {
         switch alignment { case .left: break; case .center: canvas.translate(-layout.width/2,0); case .right: canvas.translate(-layout.width,0) }
         if let reveal { canvas.clip(.rect(CGRect(x:0,y:-layout.ascent,width:layout.width*min(1,max(0,reveal.value(at:time.seconds))),height:layout.ascent+layout.descent))) }
         if outlineWidth > 0 { canvas.style = Style(fill:nil,stroke:outlineColor,lineWidth:outlineWidth); canvas.draw(layout.outline) }
-        layout.draw(on:canvas,at:.zero,color:color)
-    }
+    layout.draw(on:canvas,at:.zero,color:color)
+}
+public override func contentBounds(at time: FrameTime) -> CGRect? {
+    let x = alignment == .left ? 0 : alignment == .center ? -layout.width/2 : -layout.width, pad = outlineWidth+(layout.ascent+layout.descent)*0.3
+    return CGRect(x:x,y:-layout.ascent,width:layout.width,height:layout.ascent+layout.descent).insetBy(dx:-pad,dy:-pad)
+}
 }
 public final class ImageNode: Node {
     public let asset: ImageAsset
@@ -100,6 +147,8 @@ public final class ImageNode: Node {
         self.asset = asset; self.rect = rect ?? CGRect(x:0,y:0,width:asset.image.width,height:asset.image.height); super.init(name:name)
     }
     public override func draw(on canvas: Canvas, at time: FrameTime) { canvas.image(asset.image,in:rect) }
+    public override func contentBounds(at time: FrameTime) -> CGRect? { rect }
+    public override var paintsOnce: Bool { children.isEmpty }
 }
 /// Bounded LRU avoids loading an entire music video's sprite sequence into memory.
 public final class SpriteSequence: Node {
@@ -121,6 +170,7 @@ public final class SpriteSequence: Node {
         return image
     }
     public override func draw(on canvas: Canvas, at time: FrameTime) throws { canvas.image(try image(at:time.seconds).image,in:rect) }
+    public override func contentBounds(at time: FrameTime) -> CGRect? { rect }
 }
 public final class TraceNode: Node {
     public let points: [CGPoint], lengths: [Double], total: Double

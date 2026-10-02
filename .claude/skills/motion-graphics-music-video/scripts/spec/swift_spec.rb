@@ -65,6 +65,22 @@ RSpec.describe "Swift VFX end to end", :swift do
     expect(File.file?(service.stills([30]))).to be(true) # a lone still decodes its own ghost frames
   end
 
+it "previews a time range fast: 1x, 30 fps, absolute scene times, the soundtrack cut to the range" do
+  File.write(file("range.json"), JSON.generate({ "background" => "#000000", "nodes" => [
+    { "type" => "rect", "width" => 320, "height" => 180, "fill" => "#ffffff", "start" => 1.5, "end" => 2.5 }] }))
+  ff.run("ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=330:duration=4", "-ac", "2", file("range_tone.wav"))
+  report = Media::Graphics.new.preview(file("range.json"), file("range.mp4"), from: 1.0, to: 3.0, width: 320, height: 180,
+                                       audio: file("range_tone.wav"), jobs: 2)
+  expect(report["frames"]).to eq(60)
+  info = ff.summary(file("range.mp4"))
+  expect(info.dig(:video, :frames)).to eq(60)
+  expect(info[:duration]).to be_within(0.05).of(2.0)
+  luma = ->(t) { ff.run("ffmpeg", "-v", "error", "-ss", t.to_s, "-i", file("range.mp4"), "-frames:v", "1", "-vf", "scale=1:1", "-f", "rawvideo", "-pix_fmt", "gray", "-").bytes.first }
+  expect(luma.(0.2)).to be < 40   # 1.2 s on the scene clock: before the white rect
+  expect(luma.(1.0)).to be > 200  # 2.0 s: inside it
+  expect { Media::Graphics.new.preview(file("range.json"), file("bad.mp4"), from: 2, to: 1, width: 32, height: 32) }.to raise_error(ArgumentError)
+end
+
   it "renders a scene movie in parallel chunks identical to a sequential render, with one continuous audio track" do
     File.write(file("chunks.json"), JSON.generate({ "background" => "#101020", "nodes" => [
       { "type" => "rect", "width" => 40, "height" => 40, "fill" => "#ff5a1f", "y" => 70, "tracks" => { "x" => [[0, 0], [2, 280]] } },
