@@ -73,13 +73,38 @@ public final class SceneDocument {
                     "width","height","radius","inner","rays","points","closed","commands","fill","stroke","strokeWidth","dash","evenOdd","gradient",
                     "text","font","size","outline","outlineWidth","reveal","path","frames","fps","loop","audioAt","clipData","clipName",
                     "progress","spacing","seed","roughness","samples","samplesData","words","wordsData","entrance","color","arcStart","arcEnd","arcMode",
-                    "trimStart","trimEnd","boil","boilRate","align","tracking","strength","falloff","twist","center","resolution"])
+                    "trimStart","trimEnd","boil","boilRate","align","tracking","strength","falloff","twist","center","resolution",
+                    "skewX","skewY","rotationX","rotationY","z","panX","panY","perspective","offset","count","sides","aspect","fade"])
         let type = try o.string("type"), name = try o.string("name","")
         let w = try o.number("width",100), h = try o.number("height",100), radius = try o.number("radius",50)
         let color = try o.color("color",Color(0,1,1)) ?? .clear
         let n: Node
         switch type {
         case "group": n = Group(name:name)
+        case "plane":
+            let plane = PlaneNode(name:name)
+            plane.rotationX = try o.number("rotationX",0); plane.rotationY = try o.number("rotationY",0); plane.z = try o.number("z",0)
+            plane.panX = try o.number("panX",0); plane.panY = try o.number("panY",0); plane.perspective = try o.number("perspective",1400)
+            guard plane.perspective > 0 else { throw GraphicsError.invalid("plane perspective must be positive") }; n = plane
+        case "textpath":
+            let path: Path
+            if o.raw["points"] != nil {
+                let p = try points(o); guard p.count >= 2 else { throw GraphicsError.invalid("textpath points need at least 2 points") }
+                path = try o.bool("closed",false) ? .polygon(p,closed:true) : .spline(p)
+            } else {
+                // Circle starting at the top, running clockwise: glyphs stand outside the ring.
+                path = .polygon((0..<180).map { i in let a = -Double.pi/2+Double(i)*2*Double.pi/180; return CGPoint(x:cos(a)*radius,y:sin(a)*radius) },closed:true)
+            }
+            let tp = try TextPathNode(try o.string("text"),path:path,font:try font(o),size:try o.number("size",48),tracking:try o.number("tracking",0),name:name)
+            guard let align = TextNode.Alignment(rawValue:try o.string("align","left")) else { throw GraphicsError.invalid("align must be left, center or right") }; tp.alignment = align
+            tp.color = try o.color("fill",.white) ?? .clear; tp.outlineColor = try o.color("outline",nil); tp.outlineWidth = try o.number("outlineWidth",0)
+            tp.offset = try o.number("offset",0); n = tp
+        case "rings":
+            let rings = RingsNode(count:try o.integer("count",12),radius:radius,spacing:try o.number("spacing",40),sides:try o.integer("sides",0),name:name)
+            rings.color = try o.color("stroke",color) ?? color; rings.lineWidth = try o.number("strokeWidth",1.5); rings.twist = try o.number("twist",0)
+            rings.aspect = try o.number("aspect",1); rings.fade = try o.number("fade",1); rings.dash = try o.numbers("dash").map { CGFloat($0) }
+            rings.boil = try o.number("boil",0); rings.seed = UInt64(max(0,try o.integer("seed",1)))
+            guard rings.count <= 2000, rings.spacing != 0 else { throw GraphicsError.invalid("rings count must be 1...2000 and spacing nonzero") }; n = rings
         case "rect","square","circle","ellipse","line","point","triangle","quad","polygon","path","spline","arc","star","paper":
             let path: Path
             switch type {
@@ -174,12 +199,22 @@ public final class SceneDocument {
         }
         n.position = CGPoint(x:try o.number("x",0),y:try o.number("y",0)); n.rotation = try o.number("rotation",0)
         let scale = try o.number("scale",1); n.scale = CGPoint(x:try o.number("scaleX",scale),y:try o.number("scaleY",scale)); n.anchor = try o.point("anchor",.zero)
+        n.skewX = try o.number("skewX",0); n.skewY = try o.number("skewY",0)
         n.opacity = try o.number("opacity",1); n.start = try o.number("start",0); n.end = try o.number("end",.infinity)
         guard n.end >= n.start else { throw GraphicsError.invalid("Node end precedes start: \(type)\(name.isEmpty ? "" : " \(name)") start \(n.start) end \(n.end)") }
         let blend = try o.string("blend","normal")
         let modes: [String:CGBlendMode] = ["normal":.normal,"screen":.screen,"add":.plusLighter,"multiply":.multiply,"overlay":.overlay,"difference":.difference,"exclusion":.exclusion,"lighten":.lighten,"darken":.darken,"erase":.destinationOut]
         guard let mode = modes[blend] else { throw GraphicsError.invalid("Unknown blend \(blend)") }; if o.raw["blend"] != nil { n.blendMode = mode }
-        let animated = ["x","y","rotation","scaleX","scaleY","opacity"] + (n is ShapeNode ? ["trimStart","trimEnd","strokeWidth","dashPhase"] : n is WarpGridNode ? ["strength","twist","strokeWidth"] : [])
+        let specific: [String]
+        switch n {
+        case is ShapeNode: specific = ["trimStart","trimEnd","strokeWidth","dashPhase"]
+        case is WarpGridNode: specific = ["strength","twist","strokeWidth"]
+        case is PlaneNode: specific = ["rotationX","rotationY","z","panX","panY"]
+        case is TextPathNode: specific = ["offset","reveal"]
+        case is RingsNode: specific = ["phase","twist","spacing","strokeWidth"]
+        default: specific = []
+        }
+        let animated = ["x","y","rotation","scaleX","scaleY","opacity","skewX","skewY"] + specific
         for (key,value) in try o.object("tracks").raw {
             guard animated.contains(key) else { throw GraphicsError.invalid("Unknown animated property \(key) for \(type)") }
             do { n.tracks[key] = try track(value) } catch { throw GraphicsError.invalid("\(type)\(name.isEmpty ? "" : " \(name)") track \(key): \(error)") }

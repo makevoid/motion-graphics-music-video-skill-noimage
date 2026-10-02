@@ -6,7 +6,7 @@ import CoreGraphics
 open class Node {
     public let name: String
     public var position = CGPoint.zero, scale = CGPoint(x:1,y:1), anchor = CGPoint.zero
-    public var rotation = 0.0, opacity = 1.0
+    public var rotation = 0.0, opacity = 1.0, skewX = 0.0, skewY = 0.0
     public var start = 0.0, end = Double.infinity
     public var hidden = false
     public var blendMode: CGBlendMode = .normal
@@ -31,7 +31,10 @@ open class Node {
         guard alpha > 0 else { return }
         try canvas.withState { c in
             c.translate(value("x",position.x),value("y",position.y)); c.rotate(value("rotation",rotation))
-            c.scale(value("scaleX",scale.x),value("scaleY",scale.y)); c.translate(-anchor.x,-anchor.y)
+            c.scale(value("scaleX",scale.x),value("scaleY",scale.y))
+            let sx = value("skewX",skewX), sy = value("skewY",skewY)
+            if sx != 0 || sy != 0 { c.shear(sx,sy) }
+            c.translate(-anchor.x,-anchor.y)
             if let clip { c.clip(clip) }
             // Isolated group opacity: overlapping children fade together, once.
             c.context.setBlendMode(blendMode); c.context.setAlpha(alpha)
@@ -81,7 +84,7 @@ public final class TextNode: Node {
     }
     public override func draw(on canvas: Canvas, at time: FrameTime) {
         switch alignment { case .left: break; case .center: canvas.translate(-layout.width/2,0); case .right: canvas.translate(-layout.width,0) }
-        if let reveal { canvas.context.clip(to:CGRect(x:0,y:-layout.ascent,width:layout.width*min(1,max(0,reveal.value(at:time.seconds))),height:layout.ascent+layout.descent)) }
+        if let reveal { canvas.clip(.rect(CGRect(x:0,y:-layout.ascent,width:layout.width*min(1,max(0,reveal.value(at:time.seconds))),height:layout.ascent+layout.descent))) }
         if outlineWidth > 0 { canvas.style = Style(fill:nil,stroke:outlineColor,lineWidth:outlineWidth); canvas.draw(layout.outline) }
         layout.draw(on:canvas,at:.zero,color:color)
     }

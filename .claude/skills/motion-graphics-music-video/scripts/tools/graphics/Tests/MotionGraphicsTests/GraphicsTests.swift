@@ -125,6 +125,46 @@ final class GraphicsTests: XCTestCase {
             try Data(bad.utf8).write(to:url); XCTAssertThrowsError(try SceneDocument(url:url,width:32,height:32))
         }
     }
+    func testPlaneProjectionForeshortensClipsAndComposes() throws {
+        let p = Projection(base:.identity,pivot:.zero,rx:1,ry:0)
+        let (top,ts) = p.project(local:CGPoint(x:100,y:-100))!, (bottom,bs) = p.project(local:CGPoint(x:100,y:100))!
+        XCTAssertLessThan(ts,1); XCTAssertGreaterThan(bs,1); XCTAssertLessThan(top.x,100); XCTAssertGreaterThan(bottom.x,100)
+        XCTAssertNil(Projection(base:.identity,pivot:.zero,rx:0,ry:0,tz:-1390).project(local:.zero))
+        let nested = Projection(base:.identity,pivot:.zero,rx:0,ry:0.5,outer:p)
+        XCTAssertNotEqual(nested.map(device:CGPoint(x:50,y:-50))!.0,p.map(device:CGPoint(x:50,y:-50))!.0)
+        // A 160px square tipped back: the far (top) edge narrows inside x=20, the near (bottom) edge widens past it.
+        let scene = Scene(), plane = PlaneNode(); plane.position = CGPoint(x:100,y:100); plane.anchor = CGPoint(x:100,y:100); plane.rotationX = 1
+        try plane.add(ShapeNode(.rect(CGRect(x:20,y:20,width:160,height:160)))); try scene.root.add(plane)
+        let c = try Canvas(width:200,height:200); try scene.draw(on:c,at:FrameTime(frame:0,fps:24))
+        XCTAssertEqual(pixel(c,18,140)[3],255); XCTAssertEqual(pixel(c,18,65)[3],0)
+        XCTAssertEqual(pixel(c,100,40)[3],0); XCTAssertEqual(pixel(c,100,100)[3],255)
+    }
+    func testDocumentPlaneTextPathRingsAndSkew() throws {
+        let dir = try temp(), url = dir.appendingPathComponent("scene.json")
+        let json = """
+        {"nodes":[{"type":"plane","x":64,"y":64,"anchor":[64,64],"tracks":{"rotationY":[[0,0],[1,0.8]],"panX":[[0,0],[1,10]]},
+                   "children":[{"type":"text","text":"HI","size":30,"x":64,"y":70,"align":"center","reveal":[[0,0],[1,1]]}]},
+                  {"type":"textpath","text":"ABCD","size":16,"radius":30,"x":64,"y":64,"align":"center","tracks":{"reveal":[[0,0],[1,1]],"offset":[[0,0],[1,20]]}},
+                  {"type":"rings","radius":4,"spacing":6,"count":5,"sides":6,"x":20,"y":110,"tracks":{"phase":[[0,0],[1,1]]}},
+                  {"type":"rect","width":10,"height":10,"skewX":0.3,"tracks":{"skewY":[[0,0],[1,0.2]]}}]}
+        """
+        try Data(json.utf8).write(to:url)
+        let doc = try SceneDocument(url:url,width:128,height:128)
+        let tp = doc.scene.root.children[1] as! TextPathNode
+        XCTAssertEqual(tp.layout.glyphs.count,4); XCTAssertEqual(tp.sample(0)!.0.y,-30,accuracy:0.5)
+        func ink(_ t: Int, _ x0: Int, _ x1: Int, _ y0: Int, _ y1: Int) throws -> Int {
+            let c = try Canvas(width:128,height:128); try doc.scene.draw(on:c,at:FrameTime(frame:t,fps:24))
+            return (y0..<y1).reduce(0) { s,y in s+(x0..<x1).reduce(0) { $0+Int(pixel(c,$1,y)[3]) } }
+        }
+        XCTAssertEqual(try ink(0,44,84,20,40),0); XCTAssertGreaterThan(try ink(24,30,100,20,45),0)
+        XCTAssertGreaterThan(try ink(24,40,90,50,80),0)
+        for bad in ["{\"nodes\":[{\"type\":\"textpath\",\"text\":\"A\",\"points\":[[0,0]]}]}",
+                    "{\"nodes\":[{\"type\":\"rings\",\"spacing\":0}]}",
+                    "{\"nodes\":[{\"type\":\"plane\",\"perspective\":0}]}",
+                    "{\"nodes\":[{\"type\":\"text\",\"text\":\"A\",\"tracks\":{\"offset\":[[0,0],[1,1]]}}]}"] {
+            try Data(bad.utf8).write(to:url); XCTAssertThrowsError(try SceneDocument(url:url,width:32,height:32))
+        }
+    }
     func testCoreImageMaskAndComposition() throws {
         let c = try Compositor(width:16,height:16), canvas = try Canvas(width:16,height:16)
         let bounds = c.extent, red = CIImage(color:CIColor(red:1,green:0,blue:0)).cropped(to:bounds)

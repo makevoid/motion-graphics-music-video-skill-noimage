@@ -23,7 +23,9 @@ public struct Style {
 public final class Canvas {
     public let width: Int, height: Int, context: CGContext
     public var style = Style()
-    private var stack: [Style] = []
+    /// Active 3D plane (set by PlaneNode for its subtree); paths, text outlines and clips are projected through it.
+    public var projection: Projection?
+    private var stack: [(Style, Projection?)] = []
     public init(width: Int, height: Int) throws {
         guard width > 0, height > 0, width <= 16384, height <= 16384 else { throw GraphicsError.invalid("Canvas dimensions must be 1...16384") }
         self.width = width; self.height = height
@@ -38,19 +40,28 @@ public final class Canvas {
         context.saveGState(); context.setBlendMode(.copy); context.setFillColor(color.cgColor)
         context.fill(CGRect(x:0,y:0,width:width,height:height)); context.restoreGState()
     }
-    public func push() { stack.append(style); context.saveGState() }
-    public func pop() { precondition(!stack.isEmpty, "Unbalanced Canvas.pop"); style = stack.removeLast(); context.restoreGState() }
+    public func push() { stack.append((style,projection)); context.saveGState() }
+    public func pop() { precondition(!stack.isEmpty, "Unbalanced Canvas.pop"); (style,projection) = stack.removeLast(); context.restoreGState() }
     public func withState(_ body: (Canvas) throws -> Void) rethrows { push(); defer { pop() }; try body(self) }
     public func translate(_ x: Double, _ y: Double) { context.translateBy(x:x,y:y) }
     public func rotate(_ radians: Double) { context.rotate(by:radians) }
     public func scale(_ x: Double, _ y: Double? = nil) { context.scaleBy(x:x,y:y ?? x) }
     public func transform(_ matrix: CGAffineTransform) { context.concatenate(matrix) }
     public func shear(_ x: Double, _ y: Double) { transform(CGAffineTransform(a:1,b:tan(y),c:tan(x),d:1,tx:0,ty:0)) }
-    public func clip(_ path: Path, evenOdd: Bool = false) { context.addPath(path.cgPath); context.clip(using: evenOdd ? .evenOdd : .winding) }
+    public func clip(_ path: Path, evenOdd: Bool = false) {
+        var shape = path
+        if let projection { guard let (p,_) = projection.project(path,ctm:context.ctm) else { context.clip(to:.zero); return }; shape = p }
+        context.addPath(shape.cgPath); context.clip(using: evenOdd ? .evenOdd : .winding)
+    }
     public func draw(_ path: Path) {
         let c = context
-        c.addPath(path.cgPath); c.setLineWidth(style.lineWidth); c.setLineCap(style.lineCap); c.setLineJoin(style.lineJoin)
-        c.setLineDash(phase:style.dashPhase,lengths:style.dash)
+        var shape = path, width = style.lineWidth, dash = style.dash
+        if let projection {
+            guard let (p,s) = projection.project(path,ctm:c.ctm) else { return }
+            shape = p; width *= s; dash = dash.map { $0*CGFloat(s) }
+        }
+        c.addPath(shape.cgPath); c.setLineWidth(width); c.setLineCap(style.lineCap); c.setLineJoin(style.lineJoin)
+        c.setLineDash(phase:style.dashPhase,lengths:dash)
         if let f = style.fill { c.setFillColor(f.cgColor) }
         if let s = style.stroke { c.setStrokeColor(s.cgColor) }
         if style.fill != nil && style.stroke != nil { c.drawPath(using:style.evenOdd ? .eoFillStroke : .fillStroke) }
@@ -117,7 +128,10 @@ public final class ImageAsset {
 
 /// Shaping and glyph outlines are cached at construction, including fallback fonts.
 public final class TextLayout {
+    public struct Glyph { public let path: CGPath, x: Double, advance: Double }
     public let line: CTLine, width: Double, ascent: Double, descent: Double, outline: Path
+    /// Per-glyph outlines at the origin (y down) with their pen x and advance, for text on paths.
+    public private(set) var glyphs: [Glyph] = []
     public init(_ text: String, font: String = "HelveticaNeue", size: Double = 48, tracking: Double = 0) {
         let f = CTFontCreateWithName(font as CFString,size,nil)
         let attrs = [kCTFontAttributeName:f, kCTKernAttributeName:tracking,
@@ -131,10 +145,14 @@ public final class TextLayout {
             let font = attrs[kCTFontAttributeName] as! CTFont
             var glyphs = [CGGlyph](repeating:0,count:n), positions = [CGPoint](repeating:.zero,count:n)
             CTRunGetGlyphs(run,CFRange(location:0,length:0),&glyphs); CTRunGetPositions(run,CFRange(location:0,length:0),&positions)
+            var advances = [CGSize](repeating:.zero,count:n)
+            CTRunGetAdvances(run,CFRange(location:0,length:0),&advances)
             for i in 0..<n {
                 if let p = CTFontCreatePathForGlyph(font,glyphs[i],nil) {
                     let t = CGAffineTransform(a:1,b:0,c:0,d:-1,tx:positions[i].x,ty:-positions[i].y)
                     outline.cgPath.addPath(p,transform:t)
+                    var flip = CGAffineTransform(a:1,b:0,c:0,d:-1,tx:0,ty:-positions[i].y)
+                    if let local = p.copy(using:&flip) { self.glyphs.append(Glyph(path:local,x:positions[i].x,advance:advances[i].width)) }
                 }
             }
         }
@@ -151,6 +169,11 @@ public final class TextLayout {
         }
     }
     public func draw(on canvas: Canvas, at point: CGPoint, color: Color = .white) {
+        if canvas.projection != nil {
+            // Core Text cannot be projected; fill the cached glyph outlines instead.
+            canvas.withState { c in c.translate(point.x,point.y); c.style = Style(fill:color); c.draw(outline) }
+            return
+        }
         canvas.withState { c in
             c.translate(point.x,point.y); c.scale(1,-1); c.context.textMatrix = .identity
             c.context.textPosition = .zero; c.context.setFillColor(color.cgColor); CTLineDraw(line,c.context)

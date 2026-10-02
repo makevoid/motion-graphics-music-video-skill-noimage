@@ -26,10 +26,14 @@ if clip.shape[1] == 1:
     clip = np.repeat(clip, 2, axis=1)
 model = get_model(name)
 model.eval()
-if rate != model.samplerate:
-    raise SystemExit(f"resample to {model.samplerate} Hz first (got {rate})")
 device = "mps" if torch.backends.mps.is_available() else "cpu"
 wav = torch.from_numpy(clip.T.copy())
+if rate != model.samplerate:
+    # Separate at the model rate; stems are written back at that rate with the offset rescaled.
+    import julius
+    wav = julius.resample_frac(wav, rate, model.samplerate)
+    a = int(start * model.samplerate)
+    rate = model.samplerate
 ref = wav.mean(0)
 wav = (wav - ref.mean()) / (ref.std() + 1e-8)
 with torch.no_grad():
