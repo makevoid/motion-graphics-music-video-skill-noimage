@@ -6,7 +6,7 @@ import AVFoundation
 struct Options {
     var scene: String, out = "", width = 1920, height = 1080, frames = 1, fps = 24.0
     var only: [Int]?, data: [String:String] = [:], plate: String?, audio: String?
-    var codec = VideoCodec.h264, benchmark = false, software = false, measureCoverage = false
+    var codec = VideoCodec.h264, benchmark = false, software = false, measureCoverage = false, supersample = 1, bitrate: Int?
     init(_ arguments: [String]) throws {
         guard let first = arguments.first, !first.hasPrefix("--") else { throw GraphicsError.invalid("First argument must be a scene.json path; use --help") }; scene = first
         var i = 1
@@ -30,6 +30,8 @@ struct Options {
                 guard pair.count == 2 else { throw GraphicsError.invalid("--data requires name=file.json") }; data[pair[0]] = pair[1]
             case "--plate": plate = value
             case "--audio": audio = value
+            case "--supersample": supersample = try integer(); guard (1...4).contains(supersample) else { throw GraphicsError.invalid("--supersample must be 1...4") }
+            case "--bitrate": bitrate = try integer()
             case "--codec": guard let c = VideoCodec(rawValue:value) else { throw GraphicsError.invalid("Codec must be h264, hevc or prores4444") }; codec = c
             default: throw GraphicsError.invalid("Unknown option \(key)")
             }
@@ -49,6 +51,8 @@ struct Options {
               --plate video.mp4         Decode and compose over a video (center-cropped to fill)
               --audio song.m4a          Mux audio; otherwise inherit plate audio if present
               --codec h264|hevc|prores4444  ProRes 4444 .mov preserves alpha; MP4 flattens over black
+              --supersample 2           Draw at 2x (or 3, 4) and Lanczos-downscale: cleaner thin lines, glows and small type
+              --bitrate 15000000        Average H.264/HEVC bits/s (default 0.18 bit/pixel/frame)
               --benchmark              Render without writing; reports wall time and fps
               --software               Force software Core Image (Metal particles still require GPU)
               --analyze audio.wav --out features.json [--fps 24]  Native RMS/peak/spectrum analysis
@@ -90,7 +94,7 @@ struct Options {
         print(String(data:try JSONSerialization.data(withJSONObject:["wav":args[1],"duration":sound.duration,"peak_at":sound.peakAt]),encoding:.utf8)!)
     }
     static func run(_ o: Options) async throws {
-        let canvas = try Canvas(width:o.width,height:o.height), compositor = try Compositor(width:o.width,height:o.height,software:o.software)
+        let canvas = try Canvas(width:o.width,height:o.height,supersample:o.supersample), compositor = try Compositor(width:o.width,height:o.height,software:o.software)
         var data: [String:Any] = [:]
         for (name,path) in o.data { data[name] = try JSONSerialization.jsonObject(with:Data(contentsOf:URL(fileURLWithPath:path))) }
         let document = try SceneDocument(url:URL(fileURLWithPath:o.scene),width:o.width,height:o.height,data:data)
@@ -116,7 +120,7 @@ struct Options {
         let audioSource: AudioSource?
         if movie && !o.benchmark, let audio { audioSource = try await AudioSource(url:URL(fileURLWithPath:audio),duration:Double(o.frames)/o.fps) }
         else { audioSource = nil }
-        let writer = movie && !o.benchmark ? try VideoWriter(url:out,width:o.width,height:o.height,fps:o.fps,codec:o.codec,audio:audioSource) : nil
+        let writer = movie && !o.benchmark ? try VideoWriter(url:out,width:o.width,height:o.height,fps:o.fps,codec:o.codec,audio:audioSource,bitrate:o.bitrate) : nil
         var coverage: [String:Double] = [:]
         let reviewCanvas = o.measureCoverage ? try Canvas(width:o.width,height:o.height) : nil
         let frames = o.only?.sorted() ?? Array(0..<o.frames), start = ProcessInfo.processInfo.systemUptime
@@ -125,6 +129,9 @@ struct Options {
             let image: CIImage = try autoreleasepool {
                 try document.scene.draw(on:canvas,at:time)
                 var image = CIImage(cgImage:try canvas.snapshot())
+                if o.supersample > 1 {
+                    image = image.applyingFilter("CILanczosScaleTransform",parameters:[kCIInputScaleKey:1/Double(o.supersample),kCIInputAspectRatioKey:1.0]).cropped(to:compositor.extent)
+                }
                 for particles in document.particles { image = compositor.composite(try particles.render(at:time.seconds),over:image) }
                 image = try document.effects.apply(image,at:time)
                 if let review = reviewCanvas, frame % 6 == 0 {

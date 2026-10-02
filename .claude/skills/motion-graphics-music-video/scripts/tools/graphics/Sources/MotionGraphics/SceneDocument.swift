@@ -74,7 +74,7 @@ public final class SceneDocument {
                     "text","font","size","outline","outlineWidth","reveal","path","frames","fps","loop","audioAt","clipData","clipName",
                     "progress","spacing","seed","roughness","samples","samplesData","words","wordsData","entrance","color","arcStart","arcEnd","arcMode",
                     "trimStart","trimEnd","boil","boilRate","align","tracking","strength","falloff","twist","center","resolution",
-                    "skewX","skewY","rotationX","rotationY","z","panX","panY","perspective","offset","count","sides","aspect","fade"])
+                    "skewX","skewY","rotationX","rotationY","z","panX","panY","perspective","offset","count","sides","aspect","fade","glow","glowCore"])
         let type = try o.string("type"), name = try o.string("name","")
         let w = try o.number("width",100), h = try o.number("height",100), radius = try o.number("radius",50)
         let color = try o.color("color",Color(0,1,1)) ?? .clear
@@ -205,6 +205,9 @@ public final class SceneDocument {
         let blend = try o.string("blend","normal")
         let modes: [String:CGBlendMode] = ["normal":.normal,"screen":.screen,"add":.plusLighter,"multiply":.multiply,"overlay":.overlay,"difference":.difference,"exclusion":.exclusion,"lighten":.lighten,"darken":.darken,"erase":.destinationOut]
         guard let mode = modes[blend] else { throw GraphicsError.invalid("Unknown blend \(blend)") }; if o.raw["blend"] != nil { n.blendMode = mode }
+        let glowTrack = try o.object("tracks").raw["glow"] != nil
+        if o.raw["glow"] != nil || glowTrack { n.glow = max(0,try o.number("glow",0)) }
+        if o.raw["glowCore"] != nil { n.glowCore = min(1,max(0,try o.number("glowCore",0))) }
         let specific: [String]
         switch n {
         case is ShapeNode: specific = ["trimStart","trimEnd","strokeWidth","dashPhase"]
@@ -214,7 +217,7 @@ public final class SceneDocument {
         case is RingsNode: specific = ["phase","twist","spacing","strokeWidth"]
         default: specific = []
         }
-        let animated = ["x","y","rotation","scaleX","scaleY","opacity","skewX","skewY"] + specific
+        let animated = ["x","y","rotation","scaleX","scaleY","opacity","skewX","skewY","glow"] + specific
         for (key,value) in try o.object("tracks").raw {
             guard animated.contains(key) else { throw GraphicsError.invalid("Unknown animated property \(key) for \(type)") }
             do { n.tracks[key] = try track(value) } catch { throw GraphicsError.invalid("\(type)\(name.isEmpty ? "" : " \(name)") track \(key): \(error)") }

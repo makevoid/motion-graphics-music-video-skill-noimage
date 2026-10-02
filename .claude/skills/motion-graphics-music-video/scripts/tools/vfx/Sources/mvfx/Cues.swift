@@ -27,22 +27,24 @@ struct Cue: Decodable {
 
     var first: Int { f - (pre ?? 0) }
     var last: Int { f + dur }
-    func active(_ frame: Int) -> Bool { frame >= first && frame < last }
+    // `u` is the position on the 24 fps cue grid (output time × 24), fractional when the video runs at another rate (e.g. 60 fps),
+    // so envelopes are sampled at each output frame's exact time while cues stay authored in 24ths of a second.
+    func active(_ u: Double) -> Bool { u >= Double(first) && u < Double(last) }
 
-    // 0...1 strength of the cue at `frame`.
-    func env(_ frame: Int, defaultShape: String = "hit", curve: Double = 2.2) -> Double {
-        guard active(frame) else { return 0 }
-        if frame < f {
-            let q = Double(frame - first + 1) / Double((pre ?? 0) + 1)
+    // 0...1 strength of the cue at grid position `u`.
+    func env(_ u: Double, defaultShape: String = "hit", curve: Double = 2.2) -> Double {
+        guard active(u) else { return 0 }
+        if u < Double(f) {
+            let q = min(1, (u - Double(first) + 1) / Double((pre ?? 0) + 1))
             return q * q
         }
-        let t = Double(frame - f)
+        let t = u - Double(f)
         switch shape ?? defaultShape {
         case "span":
             let fd = Double(max(fade ?? 4, 1))
-            return min(1, (t + 1) / fd, (Double(dur) - t) / fd)
+            return max(0, min(1, (t + 1) / fd, (Double(dur) - t) / fd))
         default:
-            return pow(1 - t / Double(max(dur, 1)), curve)
+            return pow(max(0, 1 - t / Double(max(dur, 1))), curve)
         }
     }
 }

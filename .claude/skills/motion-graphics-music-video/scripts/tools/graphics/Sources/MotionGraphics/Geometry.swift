@@ -10,6 +10,8 @@ public enum GraphicsError: Error, CustomStringConvertible {
 
 public struct Color: Equatable {
     public var r, g, b, a: Double
+    /// Light emits, ink doesn't: neon halos skip dark colours (a dark halo on a light ground reads as a smudge).
+    public var glows: Bool { a > 0 && max(r,g,b) > 0.35 }
     public init(_ r: Double, _ g: Double, _ b: Double, _ a: Double = 1) {
         self.r = r; self.g = g; self.b = b; self.a = a
     }

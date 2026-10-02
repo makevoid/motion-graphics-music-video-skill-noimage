@@ -25,23 +25,31 @@ public final class Canvas {
     public var style = Style()
     /// Active 3D plane (set by PlaneNode for its subtree); paths, text outlines and clips are projected through it.
     public var projection: Projection?
-    private var stack: [(Style, Projection?)] = []
-    public init(width: Int, height: Int) throws {
+    /// Neon (inherited down the scene graph like the transform): strokes, small fills (dots, stars <= 160 px) and Core Text glyphs
+    /// cast a halo of their own colour `glow` px wide; `glowCore` 0...1 adds a thin, whitened core over strokes (the hot tube).
+    public var glow = 0.0, glowCore = 0.0
+    /// Device pixels per scene unit (supersampling); glow radii are scaled by it so the look holds at any render size.
+    public let pixelScale: Double
+    private var stack: [(Style, Projection?, Double, Double)] = []
+    /// `supersample` draws at N× the size in device pixels (scene coordinates unchanged); downscale the snapshot for output.
+    public init(width: Int, height: Int, supersample: Int = 1) throws {
         guard width > 0, height > 0, width <= 16384, height <= 16384 else { throw GraphicsError.invalid("Canvas dimensions must be 1...16384") }
-        self.width = width; self.height = height
-        guard let c = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width*4,
+        guard (1...4).contains(supersample) else { throw GraphicsError.invalid("supersample must be 1...4") }
+        self.width = width; self.height = height; pixelScale = Double(supersample)
+        let pw = width*supersample, ph = height*supersample
+        guard let c = CGContext(data: nil, width: pw, height: ph, bitsPerComponent: 8, bytesPerRow: pw*4,
                                 space: Color.space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
             throw GraphicsError.unavailable("Could not allocate drawing surface")
         }
         context = c
-        c.translateBy(x: 0, y: CGFloat(height)); c.scaleBy(x: 1, y: -1)
+        c.translateBy(x: 0, y: CGFloat(ph)); c.scaleBy(x: CGFloat(supersample), y: -CGFloat(supersample))
     }
     public func clear(_ color: Color = .clear) {
         context.saveGState(); context.setBlendMode(.copy); context.setFillColor(color.cgColor)
         context.fill(CGRect(x:0,y:0,width:width,height:height)); context.restoreGState()
     }
-    public func push() { stack.append((style,projection)); context.saveGState() }
-    public func pop() { precondition(!stack.isEmpty, "Unbalanced Canvas.pop"); (style,projection) = stack.removeLast(); context.restoreGState() }
+    public func push() { stack.append((style,projection,glow,glowCore)); context.saveGState() }
+    public func pop() { precondition(!stack.isEmpty, "Unbalanced Canvas.pop"); (style,projection,glow,glowCore) = stack.removeLast(); context.restoreGState() }
     public func withState(_ body: (Canvas) throws -> Void) rethrows { push(); defer { pop() }; try body(self) }
     public func translate(_ x: Double, _ y: Double) { context.translateBy(x:x,y:y) }
     public func rotate(_ radians: Double) { context.rotate(by:radians) }
@@ -64,10 +72,47 @@ public final class Canvas {
         c.setLineDash(phase:style.dashPhase,lengths:dash)
         if let f = style.fill { c.setFillColor(f.cgColor) }
         if let s = style.stroke { c.setStrokeColor(s.cgColor) }
-        if style.fill != nil && style.stroke != nil { c.drawPath(using:style.evenOdd ? .eoFillStroke : .fillStroke) }
-        else if style.fill != nil { c.drawPath(using:style.evenOdd ? .eoFill : .fill) }
-        else if style.stroke != nil { c.strokePath() }
-        else { c.beginPath() }
+        var halo: Color?
+        if glow > 0 {
+            if let s = style.stroke { halo = s }
+            else if let f = style.fill {
+                let box = shape.cgPath.boundingBoxOfPath.applying(c.ctm)
+                if max(box.width,box.height) <= 160*pixelScale { halo = f }
+            }
+            if let h = halo, !h.glows { halo = nil }
+        }
+        let mode: CGPathDrawingMode? = style.fill != nil && style.stroke != nil ? (style.evenOdd ? .eoFillStroke : .fillStroke)
+            : style.fill != nil ? (style.evenOdd ? .eoFill : .fill) : style.stroke != nil ? .stroke : nil
+        guard let mode else { c.beginPath(); return }
+        guard let halo else { c.drawPath(using:mode); return }
+        c.beginPath()
+        // Neon: a thin tube carries too little light for a shadow to read, so the wide halo is cast from a fattened copy of the
+        // outline drawn far off-canvas — only its blurred shadow lands (offsets are in device pixels). Then the tube itself with a
+        // tight glow, then the hot core.
+        var source: CGPath = shape.cgPath
+        if style.stroke != nil {
+            if !dash.isEmpty { source = source.copy(dashingWithPhase:style.dashPhase,lengths:dash) }
+            source = source.copy(strokingWithWidth:width+glow*0.6,lineCap:.round,lineJoin:.round,miterLimit:10)
+        } else {
+            let dot = CGMutablePath(); dot.addPath(source); dot.addPath(source.copy(strokingWithWidth:glow*0.6,lineCap:.round,lineJoin:.round,miterLimit:10)); source = dot
+        }
+        let ctm = c.ctm, away = CGFloat(c.width+c.height)*4
+        c.saveGState(); c.concatenate(ctm.inverted())
+        var device = ctm.concatenating(CGAffineTransform(translationX:away,y:0))
+        if let moved = source.copy(using:&device) {
+            let a = halo.a*0.8
+            c.setShadow(offset:CGSize(width:-away,height:0),blur:CGFloat(glow*1.6*pixelScale),color:Color(halo.r,halo.g,halo.b,a).cgColor)
+            c.setFillColor(Color(halo.r,halo.g,halo.b,1).cgColor); c.addPath(moved); c.fillPath()
+        }
+        c.restoreGState()
+        c.setShadow(offset:.zero,blur:CGFloat(glow*0.35*pixelScale),color:halo.cgColor)
+        c.addPath(shape.cgPath); c.drawPath(using:mode)
+        c.setShadow(offset:.zero,blur:0,color:nil)
+        if glowCore > 0, let s = style.stroke {
+            let k = min(1,glowCore)*0.65
+            c.addPath(shape.cgPath); c.setLineWidth(width*0.45)
+            c.setStrokeColor(Color(s.r+(1-s.r)*k,s.g+(1-s.g)*k,s.b+(1-s.b)*k,s.a).cgColor); c.strokePath()
+        }
     }
     public func rect(_ x: Double, _ y: Double, _ w: Double, _ h: Double, radius: Double = 0) { draw(.rect(CGRect(x:x,y:y,width:w,height:h), radius:radius)) }
     public func square(_ x: Double, _ y: Double, _ size: Double) { rect(x,y,size,size) }
@@ -176,7 +221,11 @@ public final class TextLayout {
         }
         canvas.withState { c in
             c.translate(point.x,point.y); c.scale(1,-1); c.context.textMatrix = .identity
-            c.context.textPosition = .zero; c.context.setFillColor(color.cgColor); CTLineDraw(line,c.context)
+            c.context.textPosition = .zero; c.context.setFillColor(color.cgColor)
+            // Small type glows; big poster words stay crisp (a halo on them reads as blur).
+            let cap = ascent*Double(hypot(c.context.ctm.a,c.context.ctm.b))/c.pixelScale
+            if c.glow > 0, color.glows, cap < 90 { c.context.setShadow(offset:.zero,blur:CGFloat(c.glow*0.7*c.pixelScale),color:color.cgColor) }
+            CTLineDraw(line,c.context)
         }
     }
 }

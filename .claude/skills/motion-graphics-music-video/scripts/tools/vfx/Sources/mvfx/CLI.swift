@@ -5,7 +5,7 @@ import MotionGraphics
 
 struct Options {
     var input = "", cues = "", out = "", lightsScene: String?, stills: String?
-    var only: [Int] = [], from = 0, to: Int?
+    var only: [Int] = [], from = 0, to: Int?, bitrate: Int?
     init(_ args: [String]) throws {
         var it = args.makeIterator()
         while let key = it.next() {
@@ -20,6 +20,7 @@ struct Options {
             case "--only": only = try value.split(separator:",").map { guard let n = Int($0) else { throw GraphicsError.invalid("Invalid frame index") }; return n }.sorted()
             case "--from": from = try integer()
             case "--to": to = try integer()
+            case "--bitrate": bitrate = try integer()
             default: throw GraphicsError.invalid("Unknown option \(key)")
             }
         }
@@ -37,16 +38,20 @@ struct Options {
         let size = try await track.load(.naturalSize), transform = try await track.load(.preferredTransform)
         let bounds = CGRect(origin:.zero,size:size).applying(transform), width = Int(abs(bounds.width)), height = Int(abs(bounds.height))
         let nominal = try await track.load(.nominalFrameRate)
-        guard abs(nominal-24) < 0.01 else { throw GraphicsError.invalid("VFX cues use a 24 fps grid; convert the input to 24 fps first") }
-        let source = try await VideoSource(url:url), total = Int((source.duration*24).rounded())
-        let last = opt.to ?? total
-        guard opt.from >= 0, last > opt.from, last <= total else { throw GraphicsError.invalid("Invalid VFX frame interval") }
-        let wanted = opt.stills == nil ? Array(opt.from..<last) : opt.only
+        // Cues, --from/--to and --only are on the 24 fps cue grid; the video may run at any rate (e.g. 60 fps): every output
+        // frame is rendered, sampling the cues at its exact time.
+        let fps = Double(nominal)
+        guard fps.isFinite, fps >= 1, fps <= 240 else { throw GraphicsError.invalid("Unsupported input frame rate \(nominal)") }
+        let toOut = { (cueFrame: Int) in Int((Double(cueFrame)*fps/24).rounded()) }
+        let source = try await VideoSource(url:url), total = Int((source.duration*fps).rounded())
+        let first = toOut(opt.from), last = opt.to.map(toOut) ?? total
+        guard first >= 0, last > first, last <= total else { throw GraphicsError.invalid("Invalid VFX frame interval") }
+        let wanted = opt.stills == nil ? Array(first..<last) : opt.only.map(toOut)
         guard !wanted.isEmpty, Set(wanted).count == wanted.count, wanted.allSatisfy({ $0 >= 0 && $0 < total }) else { throw GraphicsError.invalid("Invalid/empty VFX preview frames") }
         let data = try Data(contentsOf:URL(fileURLWithPath:opt.cues)), cues = try JSONDecoder().decode(CueFile.self,from:data).cues
-        let known = Set(["punch","zoom","shake","whip","mblur","edgeblur","glow","flash","dark","rgb","glitch","tv","grain","leak","flare","glints"])
+        let known = Set(["punch","zoom","shake","whip","mblur","edgeblur","glow","flash","dark","rgb","glitch","tv","grain","stretch","echo","bands","leak","flare","glints"])
         guard cues.allSatisfy({ known.contains($0.fx) && $0.dur > 0 && ($0.pre ?? 0) >= 0 }) else { throw GraphicsError.invalid("Invalid VFX cue") }
-        let fx = Effects(width:width,height:height), lights = try NativeLights(width:width,height:height,cues:cues)
+        let fx = Effects(width:width,height:height,fps:fps), lights = try NativeLights(width:width,height:height,cues:cues)
         // Existing cue amounts were authored with nonlinear RGB blending.
         let compositor = try Compositor(width:width,height:height,workingColorSpace:Color.space), canvas: Canvas?, custom: SceneDocument?
         if let path = opt.lightsScene {
@@ -57,14 +62,17 @@ struct Options {
         try FileManager.default.createDirectory(at:opt.stills == nil ? destination.deletingLastPathComponent() : destination,withIntermediateDirectories:true)
         let writer: VideoWriter?
         if opt.stills == nil {
-            let audio = try await AudioSource(url:url,start:Double(opt.from)/24,duration:Double(last-opt.from)/24)
-            writer = try VideoWriter(url:destination,width:width,height:height,fps:24,audio:audio)
+            let audio = try await AudioSource(url:url,start:Double(first)/fps,duration:Double(last-first)/fps)
+            writer = try VideoWriter(url:destination,width:width,height:height,fps:fps,audio:audio,bitrate:opt.bitrate)
         } else { writer = nil }
         let start = ProcessInfo.processInfo.systemUptime
+        // Decoded source frames an echo cue may read again: only as many as the longest echo reaches (each holds a decoder buffer).
+        let reach = Int((Double(cues.filter { $0.fx == "echo" }.map { max(1,min($0.n ?? 4,12))*max(1,$0.hold ?? 1) }.max() ?? 0)*fps/24).rounded(.up))
+        var recent: [Int:CIImage] = [:]
         for (index,frame) in wanted.enumerated() {
             let image: CIImage = try autoreleasepool {
-                let time = FrameTime(frame:frame,fps:24)
-                var light = try lights.image(frame:frame)
+                let time = FrameTime(frame:frame,fps:fps)
+                var light = try lights.image(frame:frame,fps:fps)
                 if let custom, let canvas {
                     try custom.scene.draw(on:canvas,at:time)
                     var overlay = CIImage(cgImage:try canvas.snapshot())
@@ -72,10 +80,19 @@ struct Options {
                     overlay = try custom.effects.apply(overlay,at:time)
                     light = light.map { compositor.composite(overlay,over:$0,mode:.screen) } ?? overlay
                 }
-                return fx.apply(try source.image(at:time.seconds,size:compositor.extent.size),frame:frame,cues:cues,lights:light)
+                // Ghosts not kept from earlier frames (stills, a clip's first frames) are decoded first: the source only reads forward,
+                // so one behind the previously decoded frame (close stills) is left out.
+                var ghosts: [Int:CIImage] = [:]
+                for k in fx.echoFrames(frame:frame,cues:cues).sorted() {
+                    if let kept = recent[k] { ghosts[k] = kept }
+                    else if k > (recent.keys.max() ?? -1) { ghosts[k] = try source.image(at:FrameTime(frame:k,fps:fps).seconds,size:compositor.extent.size) }
+                }
+                let src = try source.image(at:time.seconds,size:compositor.extent.size)
+                if reach > 0 { recent[frame] = src; ghosts.forEach { recent[$0.key] = $0.value }; recent = recent.filter { $0.key >= frame-reach } }
+                return fx.apply(src,frame:frame,cues:cues,lights:light,previous:{ ghosts[$0] })
             }
             if let writer { try await writer.append(image,frame:index,compositor:compositor) }
-            else { try ImageAsset.writePNG(compositor.image(image),to:destination.appendingPathComponent(String(format:"%04d.png",frame))) }
+            else { try ImageAsset.writePNG(compositor.image(image),to:destination.appendingPathComponent(String(format:"%04d.png",opt.only[index]))) } // named by cue frame
         }
         if let writer { try await writer.finish() }
         let result: [String:Any] = ["out":destination.path,"frames":wanted.count,"width":width,"height":height,"ms":(ProcessInfo.processInfo.systemUptime-start)*1000]

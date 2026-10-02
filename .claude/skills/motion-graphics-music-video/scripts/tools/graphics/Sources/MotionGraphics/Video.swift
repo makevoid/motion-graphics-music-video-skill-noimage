@@ -112,17 +112,19 @@ public final class VideoWriter {
     private let audio: AudioSource?
     private var audioTask: Task<Void,Error>?
     public let fps: Double
-    public init(url: URL, width: Int, height: Int, fps: Double, codec: VideoCodec = .h264, audio: AudioSource? = nil) throws {
+    /// bitrate: average bits/s for H.264/HEVC (nil = 0.18 bit per pixel per frame, at least 2 Mb/s).
+    public init(url: URL, width: Int, height: Int, fps: Double, codec: VideoCodec = .h264, audio: AudioSource? = nil, bitrate: Int? = nil) throws {
         guard width > 0, height > 0, fps.isFinite, fps > 0, fps <= 240 else { throw GraphicsError.invalid("Invalid video format") }
         guard !FileManager.default.fileExists(atPath:url.path) else { throw GraphicsError.io("Output already exists: \(url.path)") }
         if codec != .prores4444 && (width % 2 != 0 || height % 2 != 0) { throw GraphicsError.invalid("H.264/HEVC dimensions must be even") }
         if codec == .prores4444 && url.pathExtension.lowercased() != "mov" { throw GraphicsError.invalid("ProRes 4444 requires .mov") }
+        if let bitrate { guard (100_000...400_000_000).contains(bitrate) else { throw GraphicsError.invalid("Bitrate must be 100k...400M bits/s") } }
         self.fps = fps; self.audio = audio
         writer = try AVAssetWriter(outputURL:url,fileType:url.pathExtension.lowercased() == "mov" ? .mov : .mp4)
         let avCodec: AVVideoCodecType = codec == .h264 ? .h264 : codec == .hevc ? .hevc : .proRes4444
         var settings: [String:Any] = [AVVideoCodecKey:avCodec,AVVideoWidthKey:width,AVVideoHeightKey:height,
             AVVideoColorPropertiesKey:[AVVideoColorPrimariesKey:AVVideoColorPrimaries_ITU_R_709_2,AVVideoTransferFunctionKey:AVVideoTransferFunction_ITU_R_709_2,AVVideoYCbCrMatrixKey:AVVideoYCbCrMatrix_ITU_R_709_2]]
-        if codec != .prores4444 { settings[AVVideoCompressionPropertiesKey] = [AVVideoAverageBitRateKey:max(2_000_000,Int(Double(width*height)*fps*0.18)),AVVideoExpectedSourceFrameRateKey:fps] }
+        if codec != .prores4444 { settings[AVVideoCompressionPropertiesKey] = [AVVideoAverageBitRateKey:bitrate ?? max(2_000_000,Int(Double(width*height)*fps*0.18)),AVVideoExpectedSourceFrameRateKey:fps] }
         input = AVAssetWriterInput(mediaType:.video,outputSettings:settings); input.expectsMediaDataInRealTime = false
         adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput:input,sourcePixelBufferAttributes:[
             kCVPixelBufferPixelFormatTypeKey as String:kCVPixelFormatType_32BGRA,

@@ -10,6 +10,8 @@ open class Node {
     public var start = 0.0, end = Double.infinity
     public var hidden = false
     public var blendMode: CGBlendMode = .normal
+    /// Neon halo (px) and core (0...1) for this subtree; nil inherits. See Canvas.glow.
+    public var glow: Double?, glowCore: Double?
     public var clip: Path?
     public var tracks: [String:Track] = [:]
     public var update: ((Node, FrameTime) -> Void)?
@@ -36,6 +38,8 @@ open class Node {
             if sx != 0 || sy != 0 { c.shear(sx,sy) }
             c.translate(-anchor.x,-anchor.y)
             if let clip { c.clip(clip) }
+            if let glow { c.glow = max(0,value("glow",glow)) }
+            if let glowCore { c.glowCore = glowCore }
             // Isolated group opacity: overlapping children fade together, once.
             c.context.setBlendMode(blendMode); c.context.setAlpha(alpha)
             let isolated = alpha < 1 || blendMode != .normal

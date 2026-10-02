@@ -40,4 +40,53 @@ RSpec.describe "Swift VFX end to end", :swift do
     File.write(File.join(dir, "cues.yml"), YAML.dump(config))
     expect { Media::Vfx.new(name).render }.to raise_error(ArgumentError, /unknown fx/)
   end
+  it "stretches a hit along its angle and leaves echo trails behind moving shapes" do
+    source = file("moving.mp4")
+    ff.run("ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=black:s=320x180:r=24:d=2", "-f", "lavfi", "-i", "color=white:s=30x30:r=24:d=2",
+           "-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-filter_complex", "[0][1]overlay=x='20+t*100':y=75[v]", "-map", "[v]", "-map", "2",
+           "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", source)
+    name = "e2e-vfx-motion-#{Process.pid}"
+    dir = File.join(RT, "prompts", name); FileUtils.mkdir_p(dir)
+    File.write(File.join(dir, "cues.yml"), YAML.dump({ "source" => source, "out" => file("motion.mp4"),
+      "cues" => [{ "fx" => "stretch", "f" => 6, "dur" => 6, "amt" => 0.4, "x" => 0.5, "y" => 0.5 }, { "fx" => "echo", "f" => 24, "dur" => 12, "amt" => 0.9, "n" => 4, "hold" => 2, "fade" => 1 }] }))
+    service = Media::Vfx.new(name)
+    service.render
+    box = ->(png) { magick.run("magick", png, "-colorspace", "gray", "-threshold", "40%", "-trim", "-format", "%w %h", "info:", quiet: true).split.map(&:to_i) }
+    [6, 30].each do |frame|
+      ff.frame_index(source, frame, file("m_before#{frame}.png"))
+      ff.frame_index(file("motion.mp4"), frame, file("m_after#{frame}.png"))
+    end
+    w0, h0 = box.(file("m_before6.png")); w1, h1 = box.(file("m_after6.png"))
+    expect([w0, h0]).to eq([30, 30])
+    expect(w1).to be >= (w0 * 1.3).floor # stretched along 0 deg ...
+    expect(h1).to be < h0                # ... and squashed across it
+    trail, plain = box.(file("m_after30.png")).first, box.(file("m_before30.png")).first
+    expect(trail).to be >= plain + 14    # the brighter ghosts (2 and 4 frames back, 4.2 px/frame) extend it leftward
+    expect(File.file?(service.stills([30]))).to be(true) # a lone still decodes its own ghost frames
+  end
+
+  it "renders VFX on a 60 fps video with 24 fps cues: sideways RGB split, VHS bands, every output frame kept" do
+    source = file("hfr.mp4")
+    ff.run("ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=black:s=320x180:r=60:d=2,drawbox=x=140:y=0:w=40:h=180:color=white:t=fill",
+           "-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", source)
+    name = "e2e-vfx-hfr-#{Process.pid}"
+    dir = File.join(RT, "prompts", name); FileUtils.mkdir_p(dir)
+    File.write(File.join(dir, "cues.yml"), YAML.dump({ "source" => source, "out" => file("hfr_fx.mp4"), "bitrate" => 3_000_000,
+      "cues" => [{ "fx" => "rgb", "f" => 0, "dur" => 12, "amt" => 0, "radius" => 8 },                        # cue frames 0-12 = 0.0-0.5 s
+                 { "fx" => "bands", "f" => 24, "dur" => 12, "amt" => 1, "n" => 4, "size" => 0.2, "fade" => 1 }] })) # 1.0-1.5 s
+    Media::Vfx.new(name).render
+    probe = ff.run("ffprobe", "-v", "error", "-select_streams", "v", "-count_frames", "-show_entries", "stream=nb_read_frames,r_frame_rate",
+                   "-of", "csv=p=0", file("hfr_fx.mp4"), quiet: true)
+    expect(probe.strip.split(",")).to eq(["60/1", "120"])
+    rgb = ->(png, x) { magick.run("magick", png, "-format", "%[fx:int(255*p{#{x},90}.r)] %[fx:int(255*p{#{x},90}.b)]", "info:", quiet: true).split.map(&:to_i) }
+    ff.frame_index(file("hfr_fx.mp4"), 3, file("split.png"))
+    fringes = [134, 186].map { |x| r, b = rgb.(file("split.png"), x); (r - b).abs }
+    expect(fringes.max).to be > 80                 # one colour channel slid past the bar's edge, the other didn't
+    diff = ->(frame) {
+      ff.frame_index(source, frame, file("b#{frame}.png")); ff.frame_index(file("hfr_fx.mp4"), frame, file("a#{frame}.png"))
+      magick.run("magick", file("b#{frame}.png"), file("a#{frame}.png"), "-compose", "difference", "-composite", "-format", "%[fx:mean]", "info:", quiet: true).to_f
+    }
+    expect(diff.(72)).to be > 0.01                 # 1.2 s: tracking bands roll through
+    expect(diff.(110)).to be < 0.004               # 1.83 s: no cue, picture untouched
+  end
 end

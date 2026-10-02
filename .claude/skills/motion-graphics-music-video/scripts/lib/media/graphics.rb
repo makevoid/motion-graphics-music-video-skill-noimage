@@ -12,13 +12,15 @@ module Media
       { path: BIN }
     end
 
-    def render(scene, out, width:, height:, fps:, frames:, data: {}, only: nil, plate: nil, audio: nil, codec: nil, benchmark: false, coverage: false)
+    def render(scene, out, width:, height:, fps:, frames:, data: {}, only: nil, plate: nil, audio: nil, codec: nil, benchmark: false, coverage: false, supersample: nil, bitrate: nil)
       ensure_built
       args = [scene, "--out", out, "--width", width, "--height", height, "--fps", fps, "--frames", frames]
       args += ["--only", only.join(",")] if only
       args += ["--plate", plate] if plate
       args += ["--audio", audio] if audio
       args += ["--codec", codec] if codec
+      args += ["--supersample", supersample] if supersample
+      args += ["--bitrate", bitrate] if bitrate
       args << "--benchmark" if benchmark
       args << "--measure-coverage" if coverage
       data.each { |name, path| args += ["--data", "#{name}=#{path}"] }

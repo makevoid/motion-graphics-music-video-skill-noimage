@@ -21,7 +21,7 @@ module Toolkit
       "pipeline:all" => "Generate and review all configured steps of RUN",
       "anim:render" => "Render sketch: [sketch,out,frames,width,height] (local)",
       "graphics:build" => "Build native Swift drawing/composition renderer (macOS 14+)",
-      "graphics:render" => "Native scene: [scene.json,out_dir_or_movie,frames,width,height,fps]; PLATE/AUDIO/CODEC optional",
+      "graphics:render" => "Native scene: [scene.json,out_dir_or_movie,frames,width,height,fps]; PLATE/AUDIO/CODEC/SUPERSAMPLE/BITRATE optional",
       "graphics:benchmark" => "Measure native scene: [scene.json,frames,width,height,fps], no files written",
       "anim:preview" => "Preview RUN's overlay frames: [0,48,96] (local)",
       "anim:overlay" => "Render RUN's saved overlay data (local)",
@@ -101,7 +101,8 @@ module Toolkit
       when "graphics:render"
         required(a, 3)
         emit Media::Graphics.new.render(a[0], a[1], frames: Integer(a[2]), width: Integer(a[3] || 1920), height: Integer(a[4] || 1080), fps: Float(a[5] || 24),
-          plate: ENV["PLATE"], audio: ENV["AUDIO"], codec: ENV["CODEC"], only: ENV["ONLY"]&.split(",")&.map { |v| Integer(v) })
+          plate: ENV["PLATE"], audio: ENV["AUDIO"], codec: ENV["CODEC"], only: ENV["ONLY"]&.split(",")&.map { |v| Integer(v) },
+          supersample: ENV["SUPERSAMPLE"]&.then { |v| Integer(v) }, bitrate: ENV["BITRATE"]&.then { |v| Integer(v) })
       when "graphics:benchmark"
         required(a, 2)
         emit Media::Graphics.new.render(a[0], "", frames: Integer(a[1]), width: Integer(a[2] || 1920), height: Integer(a[3] || 1080), fps: Float(a[4] || 24), benchmark: true)

@@ -29,7 +29,7 @@ final class NativeLights {
                     let star = ShapeNode(.star(radius:size,inner:size*0.22),style:Style(fill:color))
                     star.position = CGPoint(x:(cue.x ?? 0.5)*w+cos(angle)*radius,y:(cue.y ?? 0.5)*h+sin(angle)*radius*0.7)
                     star.update = { node,time in
-                        let age = Double(time.frame-cue.f)
+                        let age = time.seconds*24-Double(cue.f) // on the 24 fps cue grid at any output rate
                         let scale = cue.sustain == true ? min(1,(age+1)/3)*pow(min(1,max(0,(Double(cue.dur)-age)/5)),2)*(0.85+0.15*sin(age*1.7+Double(i)*2)) : max(0,sin(.pi*min(1,max(0,(age-delay)/life))))
                         node.scale = CGPoint(x:scale,y:scale)
                     }
@@ -41,18 +41,20 @@ final class NativeLights {
         }
         self.entries = entries
     }
-    func image(frame: Int) throws -> CIImage? {
+    /// `frame` at the output rate `fps`; cue timing on the 24 fps grid.
+    func image(frame: Int, fps: Double = 24) throws -> CIImage? {
+        let u = Double(frame)*24/fps
         var active = false
         for (cue,node) in entries {
-            node.hidden = !cue.active(frame)
+            node.hidden = !cue.active(u)
             guard !node.hidden else { continue }; active = true
             if cue.fx == "leak" {
-                let age = Double(frame-cue.f)/24, side = cue.x ?? 1, direction = side > 0.5 ? -1.0 : 1.0
+                let age = (u-Double(cue.f))/24, side = cue.x ?? 1, direction = side > 0.5 ? -1.0 : 1.0
                 node.position = CGPoint(x:side*Double(canvas.width)+direction*(Double(canvas.width)*0.06+age*45),y:Double(canvas.height)*(0.35+0.08*sin(age*0.9)))
             }
-            node.opacity = (cue.amt ?? 1)*(cue.fx == "glints" ? 1 : cue.env(frame,defaultShape:cue.fx == "leak" ? "span" : "hit",curve:1.6))
+            node.opacity = (cue.amt ?? 1)*(cue.fx == "glints" ? 1 : cue.env(u,defaultShape:cue.fx == "leak" ? "span" : "hit",curve:1.6))
         }
         guard active else { return nil }
-        try scene.draw(on:canvas,at:FrameTime(frame:frame,fps:24)); return CIImage(cgImage:try canvas.snapshot())
+        try scene.draw(on:canvas,at:FrameTime(frame:frame,fps:fps)); return CIImage(cgImage:try canvas.snapshot())
     }
 }

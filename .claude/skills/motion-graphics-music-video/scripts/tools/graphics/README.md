@@ -75,6 +75,8 @@ Tracks have the form `"x": [[0, 100], [2, 800, "outCubic"]]`. Times must strictl
 | waveform | samples or samplesData (external numeric array), width, height, color, progress |
 | karaoke | words or wordsData (external `[{w,s,e},...]`), font, size |
 
+**Neon:** any node accepts `glow` (halo px, animatable track) and `glowCore` (0...1 whitened core over strokes), inherited by its subtree. Strokes, small fills (<= 160 px: dots, stars) and small type (< 90 px cap height) glow in their own colour; big fills, poster type and dark colours never do. Pair thin strokes (1-2 px) with `glow` 8-12 for crisp, high-resolution line art; render with `--supersample 2` so hairlines and halos stay clean.
+
 All shape nodes accept `fill`/`stroke` (hex, or null to disable), `strokeWidth`, `dash`, `evenOdd`, `gradient`, `trimStart`/`trimEnd`, and hand-drawn line boil: `boil` (px vertex jitter), `boilRate` (redraws per second, default 12), `seed`. A linear gradient specifies `colors`, `from`, `to`; a radial gradient specifies `colors`, `center`, `radius`. Paths and gradients are constructed once. Unknown keys, node types, effects, and animated properties fail with an error. Fields belonging to other valid node types are not a strict per-type schema; consult this table.
 
 Asset paths are relative to the scene JSON. External `--data name=file.json` paths are relative to the process working directory. Pipeline clip metadata `dir` is also relative to that working directory. Sprite `audio_at` is honored; use x/y/width/height for placement (automatic `src`/`box` placement is available via Swift arithmetic, not a JSON option).
@@ -132,6 +134,8 @@ try await writer.finish()
 `Scene3D` exposes SCNScene/SCNNode, camera, geometry, lights, materials, model loading and a retained Metal target. Use `.box`, `.sphere`, `.ellipsoid`, `.plane`, `.cone`, `.cylinder`, `.torus`, or native SCNGeometry. Animate transforms explicitly; SceneKit actions are stateful, and imported animations need scene-time timing for deterministic seeking. SceneKit is deprecated in new SDKs, so this adapter is isolated from the 2D renderer. It is a Swift API, not a JSON node. GPU renderer tests verify it on the current macOS host.
 
 ## Video, audio and performance
+
+`--supersample N` (1-4) draws the scene at N× and Lanczos-downscales before particles and effects (about 2× the draw time at N=2). `--bitrate` sets the average H.264/HEVC bits/s (default 0.18 bit/pixel/frame: 22 Mb/s at 1080p60). Through Ruby: `SUPERSAMPLE=2 BITRATE=15000000 … graphics:render[...]`.
 
 PNG and ProRes 4444 MOV preserve transparency. H.264/HEVC are opaque and flatten graphics over black when no plate exists. AVAssetWriter chooses the available encoder; hardware encoding is not guaranteed. Output is SDR sRGB/Rec.709 with 8-bit BGRA encoder buffers; Metal intermediates are half-float, but this is not an HDR mastering pipeline.
 

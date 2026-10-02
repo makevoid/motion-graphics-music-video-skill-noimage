@@ -11,7 +11,7 @@ module Media
     ROOT = File.expand_path("../..", __dir__)
     PACKAGE = File.join(ROOT, "tools", "vfx")
     BIN = File.join(PACKAGE, ".build", "release", "mvfx")
-    CORE_IMAGE = %w[punch zoom shake whip mblur edgeblur glow flash dark rgb glitch tv grain].freeze
+    CORE_IMAGE = %w[punch zoom shake whip mblur edgeblur glow flash dark rgb glitch tv grain stretch echo bands].freeze
     LIGHTS = %w[leak flare glints].freeze
 
     attr_reader :name, :dir
@@ -66,14 +66,14 @@ module Media
     # Frames [from, to) with the song, as its own video -> output/<name>/clip_<from>_<to>.mp4.
     def clip(from, to)
       cues
-      mvfx("--out", path("clip_#{from}_#{to}.mp4"), "--from", from, "--to", to)
+      mvfx("--out", path("clip_#{from}_#{to}.mp4"), "--from", from, "--to", to, *bitrate)
       path("clip_#{from}_#{to}.mp4")
     end
 
     # The whole video -> config `out` (the source's audio stream copied).
     def render
       cues
-      mvfx("--out", out)
+      mvfx("--out", out, *bitrate)
       out
     end
 
@@ -81,6 +81,9 @@ module Media
                                              "stream=nb_read_packets", "-of", "csv=p=0", source, quiet: true).to_i
 
     private
+
+    # cues.yml `bitrate:` (bits/s, e.g. 15_000_000) for the encode; default scales with size and frame rate.
+    def bitrate = config["bitrate"] ? ["--bitrate", Integer(config["bitrate"])] : []
 
     def mvfx(*args)
       dependencies = Dir[File.join(PACKAGE, "Sources", "**", "*.swift")] + Dir[File.join(Graphics::PACKAGE, "Sources", "**", "*.swift")] + [File.join(PACKAGE, "Package.swift"), File.join(Graphics::PACKAGE, "Package.swift")]

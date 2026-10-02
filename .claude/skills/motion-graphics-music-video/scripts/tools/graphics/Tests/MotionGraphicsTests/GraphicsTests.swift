@@ -116,6 +116,33 @@ final class GraphicsTests: XCTestCase {
         let file = try AVAudioFile(forReading:url)
         XCTAssertEqual(file.processingFormat.channelCount,2); XCTAssertEqual(file.fileFormat.sampleRate,48_000); XCTAssertEqual(file.length,1680)
     }
+    func testNeonGlowHalosStrokesAndSmallFillsOnlyAndSupersamplingKeepsSceneCoordinates() throws {
+        func line(glow: Double, core: Double) throws -> Canvas {
+            let c = try Canvas(width:64,height:32); c.clear()
+            let scene = Scene(), n = ShapeNode(.polygon([CGPoint(x:4,y:16),CGPoint(x:60,y:16)],closed:false),style:Style(fill:nil,stroke:Color(1,0,0),lineWidth:2))
+            if glow > 0 { n.glow = glow; n.glowCore = core }
+            try scene.root.add(n); try scene.draw(on:c,at:FrameTime(frame:0,fps:24)); return c
+        }
+        let plain = try line(glow:0,core:0), neon = try line(glow:6,core:1)
+        XCTAssertEqual(pixel(plain,32,22)[3],0)
+        XCTAssertGreaterThan(pixel(neon,32,22)[3],10)                       // halo outside the stroke
+        XCTAssertGreaterThan(pixel(neon,32,16)[1],60)                       // whitened core on a red tube
+        XCTAssertLessThan(pixel(plain,32,16)[1],10)
+        // Big fills never glow (a background must not haze the frame); small dots do.
+        let c = try Canvas(width:400,height:400); c.clear(); c.glow = 8
+        c.style = Style(fill:Color(0,1,0)); c.rect(20,20,300,300); c.circle(370,370,6)
+        XCTAssertEqual(pixel(c,20,330)[3],0); XCTAssertGreaterThan(pixel(c,370,376)[3],10)
+        let ink = try Canvas(width:64,height:64); ink.clear(); ink.glow = 8; ink.style = Style(fill:nil,stroke:Color(0.05,0.05,0.05),lineWidth:2)
+        ink.line(4,32,60,32); XCTAssertEqual(pixel(ink,32,38)[3],0)                 // dark ink never glows
+        // 2x supersampling: twice the device pixels, same scene coordinates and top-left origin.
+        let s = try Canvas(width:32,height:32,supersample:2); s.clear(); s.style = Style(fill:Color(1,1,1)); s.rect(0,0,10,10)
+        XCTAssertEqual(s.context.width,64); XCTAssertEqual(pixel(s,19,19)[3],255); XCTAssertEqual(pixel(s,21,21)[3],0)
+        XCTAssertThrowsError(try Canvas(width:8,height:8,supersample:5))
+        let dir = try temp(), url = dir.appendingPathComponent("scene.json")
+        try Data(#"{"nodes":[{"type":"group","glow":4,"glowCore":0.5,"children":[{"type":"line","points":[[0,0],[9,0]],"tracks":{"glow":[[0,2],[1,6]]}}]}]}"#.utf8).write(to:url)
+        let doc = try SceneDocument(url:url,width:32,height:32), group = doc.scene.root.children[0]
+        XCTAssertEqual(group.glow,4); XCTAssertEqual(group.glowCore,0.5); XCTAssertEqual(group.children[0].glow,0); XCTAssertNotNil(group.children[0].tracks["glow"])
+    }
     func testInExpoMirrorsOutExpo() {
         XCTAssertEqual(Easing.inExpo.evaluate(0),0); XCTAssertEqual(Easing.inExpo.evaluate(1),1,accuracy:1e-12)
         XCTAssertEqual(Easing.inExpo.evaluate(0.3),1-Easing.outExpo.evaluate(0.7),accuracy:1e-12)
