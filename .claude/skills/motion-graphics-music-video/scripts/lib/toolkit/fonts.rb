@@ -15,7 +15,7 @@ module Toolkit
     def copy(selection, project: Dir.pwd)
       map = JSON.parse(File.read(selection))
       raise ArgumentError, "Font selection must be a nonempty JSON object" unless map.is_a?(Hash) && !map.empty?
-      destination = File.join(project, "tools/p5/fonts")
+      destination = File.join(project, "tools/graphics/fonts")
       files = map.map do |name, source|
         unless name == File.basename(name) && %w[.ttf .otf].include?(File.extname(name).downcase)
           raise ArgumentError, "Use a .ttf or .otf filename without directories: #{name}"

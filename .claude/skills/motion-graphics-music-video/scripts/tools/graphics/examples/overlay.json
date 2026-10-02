@@ -1,0 +1,11 @@
+{
+  "version":1,
+  "nodes":[
+    {"type":"group","x":160,"y":90,"scale":0.35,"children":[
+      {"type":"reticle","radius":120,"color":"#22eeffaa","tracks":{"rotation":[[0,0],[4,6.283185]]}},
+      {"type":"star","radius":30,"inner":7,"rays":4,"fill":"#ffffff"}
+    ]},
+    {"type":"text","x":16,"y":28,"text":"SIGNAL ONLINE","font":"Menlo","size":15,"fill":"#4affd6","reveal":[[0,0],[0.7,1]]},
+    {"type":"trace","points":[[16,160],[74,160],[90,145],[135,145]],"color":"#4affd6","progress":[[0,0],[1.2,1]]}
+  ]
+}

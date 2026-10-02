@@ -19,7 +19,7 @@ RSpec.describe Toolkit::Fonts, :core do
     result = fonts.copy(file("fonts.json"), project: project)
     expect(File.binread(result.first[:path])).to eq(File.binread(source))
     expect(result.first[:sha256]).to eq(Digest::SHA256.file(source).hexdigest)
-    expect(Dir.children(File.join(project, "tools/p5/fonts"))).to eq(["title.ttf"])
+    expect(Dir.children(File.join(project, "tools/graphics/fonts"))).to eq(["title.ttf"])
     expect(fonts.copy(file("fonts.json"), project: project)).to eq(result)
     File.write(source, "replacement")
     expect { fonts.copy(file("fonts.json"), project: project) }.to raise_error(ArgumentError, /different bytes/)
@@ -32,7 +32,7 @@ RSpec.describe Toolkit::Fonts, :core do
     project = file("project")
     json(file("fonts.json"), "valid.ttf" => source, "missing.ttf" => file("absent.ttf"))
     expect { fonts.copy(file("fonts.json"), project: project) }.to raise_error(ArgumentError, /Missing/)
-    expect(File.exist?(File.join(project, "tools/p5/fonts/valid.ttf"))).to be(false)
+    expect(File.exist?(File.join(project, "tools/graphics/fonts/valid.ttf"))).to be(false)
     json(file("fonts.json"), "../escape.ttf" => source)
     expect { fonts.copy(file("fonts.json"), project: project) }.to raise_error(ArgumentError, /without directories/)
   end

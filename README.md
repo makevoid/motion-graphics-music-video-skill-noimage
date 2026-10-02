@@ -6,7 +6,7 @@ A Claude Code plugin for creating high quality motion graphics videos from just 
 
 ---
 
-It includes Image generation and editing with GPT 2.5 Sunburts xhigh for generating characters and potentially other graphics, MiniMax H3 to animate the characters and the graphics in a with a greenscreen background and other tools that are helpful to isolate audio for lip-sync and SFX creation - all of these are done via FAL.ai API via video/audio adapters - For the animation Nodejs with P5JS is used, local Python is used for  analysis/cutouts/audio mixing and Swift Core has powerful and fast Image VFX (video effects).
+It includes Image generation and editing with GPT 2.5 Sunburts xhigh for generating characters and potentially other graphics, MiniMax H3 to animate the characters and the graphics in a with a greenscreen background and other tools that are helpful to isolate audio for lip-sync and SFX creation - all of these are done via FAL.ai API via video/audio adapters - Animation and composition use native Swift with Core Graphics, Core Text, Metal and AVFoundation, local Python is used for  analysis/cutouts/audio mixing and Swift Core has powerful and fast Image VFX (video effects).
 
 This is a very powerful toolkit that will generate videos like the ones below with a relatively low budget (~30$ of Fal AI credits and around 3M Tokens of Opus 5.5 for a ~3m long song / video).
 
@@ -15,6 +15,8 @@ Follow the quick start below, then supply a song and creative prompt. The agent 
 The MP4 HD video file will be generated in the `ouput` directory at the end of the process as a single high quality video. You can open the directory at any time to see the process and intermediate artifacts. 
 
 [Skill instructions](.claude/skills/motion-graphics-music-video/SKILL.md) · [Task reference](.claude/skills/motion-graphics-music-video/references/tasks.md) · [Testing](.claude/skills/motion-graphics-music-video/references/testing.md)
+
+Native Swift drawing and animation is the rendering backend: retained paths/text, scene graphs, keyframes, Metal particles, Core Image composition and direct video export. See the [capability map and measurements](docs/processing-native-map.md) and [toolkit guide](.claude/skills/motion-graphics-music-video/scripts/tools/graphics/README.md).
 
 ## Videos created with this skill
 
@@ -62,15 +64,14 @@ That's it. The plugin's `music-video` MCP server runs every Fal AI task with you
 
 ### Requirements
 
-Before generating a video, you can install some of these dependencies, which on Mac OS should be easy to install - they're not required, you could prompt the skill to do as much as it can with just basic Ruby, NodeJS and Python but you get the best of results if you have everything as Opus will be able to have access to all the powerful tools in the toolkit
+Install the native rendering and media dependencies before generating a video. The graphics backend requires macOS 14+; there is no browser or Node.js dependency.
 
 - Python 3 (should be installed already)
 - Homebrew https://brew.sh/ - this is needed to install the other dependencies
 - Ruby 3.2+ with Bundler (Mac OS comes with it with 2.6 - this should work as well but the agent will spend some time setting the project up, I recommend you try to install ruby via homebrew)
-- Node.js 22+
 - FFmpeg (from homebrew)
 - ImageMagick (also from brew)
-- Swift VFX and the full test suite require macOS 14+ with Swift 5.9+ / Xcode command line tools - that is very much optional but recommended
+- Swift graphics/VFX and the full test suite require macOS 14+ with Swift 5.9+ / Xcode command line tools
 
 ### Running the skill
 
@@ -122,7 +123,7 @@ Just providing the song + telling to do his best also works. Also providing the 
 
 ---
 
-The skill creates a separate video project, runs `setup` to install Ruby gems, npm packages, and a local Python environment there, then runs `doctor` to check dependencies. It asks you to approve its plan and budget before new generation trying also to do an estimate of the cost on Fal.ai. Dependencies and production files stay in the video project, outside the plugin installation.
+The skill creates a separate video project, runs `setup` to install Ruby gems and a local Python environment, then builds the Swift renderers there, then runs `doctor` to check dependencies. It asks you to approve its plan and budget before new generation trying also to do an estimate of the cost on Fal.ai. Dependencies and production files stay in the video project, outside the plugin installation.
 
 Plugin sessions run it through the MCP server to include the configured key; a direct Bash invocation cannot see the plugin's sensitive option. 
 
@@ -142,7 +143,7 @@ I am looking for any contributions such as:
 
 - Running the skill and posting the output, upload / link your video and post or DM me on twitter 
 - Adding other tools from Fal that are helpful to create videos
-- Adding Nodejs P5JS effects / overlays / etc
+- Adding native Swift effects, overlays and animated scenes
 - Adding Python tools for any kind of generic manipulation - even if they require packages to be installed - they may be worth it
 - Swift VFX effects (I really think there's the most powerful chance here to do something unique as these are very good high quality libs that could create awesome effects that usually are blazing fast to be applied to the video files)
 - other ideas and prompts (e.g. realism / other unexplored avenues)
@@ -240,7 +241,7 @@ ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb setup
 ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb test
 ```
 
-`rake test` is also a thin delegate to the Ruby entry point. All normal tests are local and make no paid Fal calls. Live tests require explicit paid-test opt-in; see the testing guide. The local full suite requires macOS for Swift VFX, Chrome, FFmpeg, ImageMagick, Node, Python and Ruby. No original project outputs, songs, secrets or generated characters are bundled. Fonts are selected from the host system and copied into each video workspace immediately before rendering; no font files are bundled.
+`rake test` is also a thin delegate to the Ruby entry point. All normal tests are local and make no paid Fal calls. Live tests require explicit paid-test opt-in; see the testing guide. The local full suite requires macOS for Swift graphics/VFX, FFmpeg, ImageMagick, Python and Ruby. No original project outputs, songs, secrets or generated characters are bundled. Fonts are selected from the host system and copied into each video workspace immediately before rendering; no font files are bundled.
 
 ## License
 
@@ -253,5 +254,5 @@ The local MCP server and standalone CLI send data to external services:
 - **Fal API and storage** (`queue.fal.run`, `rest.alpha.fal.ai`, provider-returned URLs including `*.fal.media`): API authentication, prompts, lyrics, settings, and selected audio/images/video for generation, transcription, and stem separation. Media URLs may be accessible to anyone with the link; remote assets are not automatically deleted. See [Fal's privacy policy](https://fal.ai/legal/privacy-policy).
 - **Fal schemas** (`fal.ai/api/openapi/queue/openapi.json`): model identifiers for schema lookup.
 - **Web research**: creative-brief search queries and reference URLs go to Claude's configured search provider and visited sites.
-- **Dependencies and updates**: setup contacts RubyGems, npm, and PyPI (or configured mirrors) with package information; plugin installation and updates contact GitHub.
+- **Dependencies and updates**: setup contacts RubyGems and PyPI (or configured mirrors) with package information; plugin installation and updates contact GitHub.
 - **Local processing**: analysis, rendering, editing, and exports run locally. No maintainer telemetry or automatic social publishing is included. Normal Claude conversation and tool-result handling still applies.

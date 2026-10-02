@@ -10,15 +10,15 @@ PROFILE=media ruby scripts/mv.rb test
 PROFILE=swift ruby scripts/mv.rb test
 ```
 
-The repository root also has `rake test`. `PROFILE=all` (default) runs all non-live examples. It fails if a required backend cannot run, including Chrome local-server restrictions or Swift on a non-macOS machine. Use a narrower profile intentionally when that backend is unavailable; report what was not exercised. Tests leave diagnostic fixtures in `scripts/tmp/` and derived review outputs under `scripts/output/`, both ignored by git.
+The repository root also has `rake test`. `PROFILE=all` (default) runs all non-live examples. It fails if a required backend cannot run, including unavailable native GPU/codec services or Swift on a non-macOS machine. Use a narrower profile intentionally when that backend is unavailable; report what was not exercised. Tests leave diagnostic fixtures in `scripts/tmp/` and derived review outputs under `scripts/output/`, both ignored by git.
 
 ## What is tested
 
 | Profile | Observable behavior |
 |---|---|
 | core | skill metadata/reference links, CLI help/task discovery, intake/initialization and overwrite rejection, literal shell arguments, subprocess errors, plan approval invalidation, wave progression/dependencies/resume, monitored worker journals, identity import with byte/provenance validation, noncontiguous assembly rejection, Fal HTTP submit/poll/result/cache, schema rejection and queue errors |
-| media | real FFmpeg/ffprobe + ImageMagick + Python audio duration/silence/energy, local soundtrack processing without a Fal client, full-song cue offsets and first-render overlay manifests, cut detection, character/keyframe/H3 adapter workflow with synthetic Fal responses, green alpha edges, p5 sprite bounds/placement, actual moving pixels, deterministic repeat, overlay/assembly frame counts and soundtrack correlation, SFX timing/peak behavior, mouth-alignment diagnostic |
-| swift | real Swift build and character-scene VFX render, cue-on/cue-off pixel/luminance checks, audio/frame preservation and invalid effect rejection |
+| media | real FFmpeg/ffprobe + ImageMagick + Python audio duration/silence/energy, local soundtrack processing without a Fal client, full-song cue offsets and first-render overlay manifests, cut detection, character/keyframe/H3 adapter workflow with synthetic Fal responses, green alpha edges, Swift graphics sprite bounds/placement, actual moving pixels, deterministic repeat, overlay/assembly frame counts and soundtrack correlation, SFX timing/peak behavior, mouth-alignment diagnostic |
+| swift | native graphics geometry/alpha/seek tests, Metal particles/compute/3D, H.264 timing, ProRes alpha, audio analysis, sparse JSON overlay routing; real Swift build and character-scene VFX render, cue-on/cue-off pixel/luminance checks, audio/frame preservation and invalid effect rejection |
 | live | paid real Sunburst character → edit → H3 768P animation (5 s is the H3 minimum), real Whisper/Demucs/SFX audio outputs and a local composition/VFX pass using the generated assets |
 
 Offline synthetic media is deliberately simple so placement/alpha/timing are measurable. Generated projects retain a `.skill/` copy of the instructions and references, so their copied test suite can validate the documentation as well. Mocked Fal responses verify client and pipeline plumbing; they cannot demonstrate the provider's current output quality or lipsync. Live generation is stochastic: tests enforce media/schema/placement invariants and save artifacts for visual review rather than asserting subjective beauty.

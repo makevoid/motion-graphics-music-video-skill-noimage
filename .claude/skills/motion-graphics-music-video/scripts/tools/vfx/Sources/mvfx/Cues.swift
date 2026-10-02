@@ -4,7 +4,7 @@ import Foundation
 //   f: the frame the effect hits (the beat), dur: frames it lasts from there, pre: frames of ramp-in before f.
 //   shape: "hit" (full at f, decays to 0 over dur) or "span" (fades in over `fade` frames from f, holds, fades out by f + dur).
 // Every other field is a per-effect knob with a default in Effects.swift. Cues with an fx this tool doesn't know
-// (the p5 light layer's leak/flare/glints) are skipped here; their frames reach the video through --lights.
+// (leak/flare/glints) are rendered by NativeLights in memory.
 struct Cue: Decodable {
     let fx: String
     let f: Int
@@ -21,6 +21,9 @@ struct Cue: Decodable {
     var hold: Int?
     var seed: Int?
     var grain: Double?
+    var n: Int?
+    var size: Double?
+    var sustain: Bool?
 
     var first: Int { f - (pre ?? 0) }
     var last: Int { f + dur }

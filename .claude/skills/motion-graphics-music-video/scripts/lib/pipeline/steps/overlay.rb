@@ -1,12 +1,7 @@
 module Pipeline
   module Steps
-    # Step 5 — motion-graphics overlay: the p5.js sketch prompts/<run>/05_overlay.js, rendered to a transparent
-    # PNG sequence by anim/render.mjs and composited over the plate (video or shots step's final.mp4) -> final_overlay.mp4.
-    # The sketch gets Whisper word timestamps of the song (Anim.data("words")) and, for every generation
-    # `track: { name => [x, y, size, search, from_frame] }`, that feature's per-frame position (Anim.data(name)).
-    # On a multi-shot plate it also gets the edit, Anim.data("shots") = [{ name, start_frame, frames }], to cut with the picture.
-    # With a Clips step it gets the character sprites, Anim.data("clips") = { name => { dir, frames, w, h, audio_at, box, src } } (Anim.clip(name)),
-    # and `plate: <keyframe>` (or "<run>/<keyframe>") in the generation makes the plate that keyframe held still (paper): the sketch animates everything else.
+    # Step 5: native Swift scene composition over a video or still plate.
+    # Only the final movie is persisted; frame buffers/layers/audio stay in memory.
     class Overlay < Step
       MODEL = Fal::Models::Whisper
       OUT = "final_overlay.mp4".freeze
@@ -41,11 +36,18 @@ module Pipeline
 
       # Render all frames and composite, from the saved words.json / track files (no fal call): rake anim:overlay.
       def render!
-        dir = project.path("05_overlay", "frames")
-        FileUtils.rm_rf(dir)
-        summary = anim.render(sketch, dir, **plate_format, data: data_files)
-        path = ffmpeg.overlay_frames(plate, dir, project.path(OUT), fps: plate_format[:fps])
-        data = { path: path, frames_dir: dir, sketch: sketch, render_ms: summary["ms"] }
+        require "securerandom"
+        target = project.path(OUT)
+        temporary = project.path(".overlay-#{SecureRandom.hex(8)}.mp4")
+        begin
+          summary = anim.render(sketch, temporary, **plate_format, data: data_files, plate: plate,
+                                audio: still_plate? ? project.fetch!(:music, :path) : nil, coverage: true)
+          FileUtils.mv(temporary, target)
+        ensure
+          FileUtils.rm_f(temporary)
+        end
+        data = { path: target, sketch: sketch, render_ms: summary["ms"], rendered_frames: summary["frames"],
+                 coverage_pct_by_frame: summary["coverage_pct_by_frame"], backend: "swift" }
         project.record(key, data.merge(review: nil))
         data
       end
@@ -53,10 +55,9 @@ module Pipeline
       # Render only `frames` and composite each over its plate frame into one board: rake anim:preview[0,48,96].
       def preview!(frames)
         dir = project.path("05_overlay", "preview")
-        anim.render(sketch, dir, **plate_format, data: data_files, only: frames)
+        anim.render(sketch, dir, **plate_format, data: data_files, only: frames, plate: plate)
         stills = frames.map do |i|
-          [ffmpeg.overlay_still(plate, i, File.join(dir, format("%04d.png", i)), File.join(dir, format("still_%04d.jpg", i))),
-           format("f%d  %.2fs", i, i.to_f / plate_format[:fps])]
+          [File.join(dir, format("%04d.png", i)), format("f%d  %.2fs", i, i.to_f / plate_format[:fps])]
         end
         magick.board(stills, project.review_path(key, "preview.jpg"), tile: "#{[stills.size, 3].min}x", width: 960).tap { |b| puts b }
       end
@@ -64,19 +65,19 @@ module Pipeline
       def review
         final = project[key]["path"]
         summary = ffmpeg.summary(final)
-        frames = Dir[File.join(project[key]["frames_dir"], "*.png")].sort
-        coverage = frames.each_slice(6).map(&:first).to_h { |f| [File.basename(f, ".png").to_i, (magick.alpha_coverage(f) * 100).round(1)] }
+        rendered_frames = project[key]["rendered_frames"]
+        coverage = project[key].fetch("coverage_pct_by_frame", {})
         compare = ffmpeg.hstack(reference, final, project.review_path(key, "reference_vs_overlay.mp4")) if reference
         {
           summary: summary, contact_sheet: ffmpeg.contact_sheet(final, project.review_path(key, "contact_sheet.jpg"), cols: 6, rows: 3),
           coverage_pct_by_frame: coverage, compare: compare,
           **verdict(
-            "same length as plate" => [(summary[:duration] - ffmpeg.duration(plate)).abs < 0.05, "#{summary[:duration]}s"],
-            "every plate frame rendered" => [frames.size == plate_format[:frames], "#{frames.size}/#{plate_format[:frames]} png"],
+            "same length as plate" => [(summary[:duration] - project.duration).abs < 0.05, "#{summary[:duration]}s"],
+            "every plate frame rendered" => [rendered_frames == plate_format[:frames] && summary.dig(:video, :frames) == plate_format[:frames], "#{rendered_frames}/#{plate_format[:frames]} encoded frames"],
             "audio kept" => [summary.dig(:audio, :codec) == "aac", summary[:audio].inspect],
-            "overlay present" => [coverage.values.count(&:positive?) >= coverage.size * 0.8, "#{coverage.values.count(&:positive?)}/#{coverage.size} sampled frames have graphics"],
+            "overlay present" => [!coverage.empty? && coverage.values.count(&:positive?) >= coverage.size * 0.8, "#{coverage.values.count(&:positive?)}/#{coverage.size} sampled frames have graphics"],
             # a still plate is just paper: the sketch is the picture
-            "plate not buried" => [still_plate? || coverage.values.max < 45, "max coverage #{coverage.values.max}%"]
+            "plate not buried" => [still_plate? || (coverage.values.max || 0) < 45, "max coverage #{coverage.values.max}%"]
           )
         }
       end
@@ -91,10 +92,7 @@ module Pipeline
       # The video to draw on: a held keyframe (plate:), the multi-shot plate, or the single-shot video.
       def plate
         return project.fetch!(project.step?(Shots) ? :shots : :video, :path) unless still_plate?
-        out = project.path("04_plate_still.mp4")
-        return out if File.exist?(out)
-        image = project.keyframe(project.generation[:plate])["path"]
-        ffmpeg.still_plate(image, project.fetch!(:music, :path), out, seconds: project.duration, fps: Clips::FPS)
+        project.keyframe(project.generation[:plate])["path"]
       end
 
       def still_plate? = !!project.generation[:plate]
@@ -117,11 +115,19 @@ module Pipeline
 
       def track!
         tracks.each do |name, (x, y, size, search, from)|
-          File.write(data_path(name), JSON.generate(python.track_template(plate, x, y, size, search || size, from || 0)))
+          result = if still_plate?
+            format = plate_format
+            { fps: format[:fps], width: format[:width], height: format[:height],
+              points: Array.new(format[:frames]) { |frame| [x, y, frame < (from || 0) ? 0.0 : 1.0] } }
+          else
+            python.track_template(plate, x, y, size, search || size, from || 0)
+          end
+          File.write(data_path(name), JSON.generate(result))
         end
       end
 
       def plate_format
+        return { width: 1920, height: 1080, fps: Clips::FPS, frames: (project.duration * Clips::FPS).round } if still_plate?
         @plate_format ||= ffmpeg.summary(plate).then do |s|
           { width: s.dig(:video, :w), height: s.dig(:video, :h), fps: s.dig(:video, :fps),
             frames: s.dig(:video, :frames) || (s[:duration] * s.dig(:video, :fps)).round }

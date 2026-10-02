@@ -10,11 +10,11 @@ Production approval includes necessary Fal uploads, generated-image reuse and ge
 
 The one-sentence premise, opening hook, main peak/drop, emotional arc, ending and recurring visual joke. Visual medium, rendering/materials, lighting, texture, typography if used, camera language, visual density and moments of restraint. Explain how the chosen look suits the song and brief. Require hyper quality, interesting detail, expressive animation and potential fun/virality without promising audience outcomes.
 
-Style bible: the exact style paragraph pasted into every image prompt, including background treatment, colour anchors and the permitted shading, gradients or lighting variation. Choose palette size to suit the style; specify hex values where exact matching matters and share those constants with p5. Select typography and textures for this direction rather than inheriting the bundled examples.
+Style bible: the exact style paragraph pasted into every image prompt, including background treatment, colour anchors and the permitted shading, gradients or lighting variation. Choose palette size to suit the style; specify hex values where exact matching matters and share those constants with Swift graphics. Select typography and textures for this direction rather than inheriting the bundled examples.
 
-Composition rule: characters are generated alone on chroma green and composited by p5 over still plates and drawn graphics. List every full-frame H3 shot with its reason; none is the expected answer.
+Composition rule: characters are generated alone on chroma green and composited by Swift graphics over still plates and drawn graphics. List every full-frame H3 shot with its reason; none is the expected answer.
 
-Typography: selected installed font faces/weights and required glyph coverage. Before rendering, record absolute source paths and copied filenames under the video's `tools/p5/fonts/` (selection in `config/fonts.json`).
+Typography: selected installed font faces/weights and required glyph coverage. Before rendering, record absolute source paths and copied filenames under the video's `tools/graphics/fonts/` (selection in `config/fonts.json`).
 
 ## Research
 
@@ -26,14 +26,14 @@ For each cast member: stable ID/version, role, silhouette, face, hair, clothing,
 
 ## Full-song storyboard
 
-| Scene/run | Start frame | Frames/end | Song section/lyrics | Acting/mouth targets | Camera and layers | Layer sources (H3 sprite / still plate / p5) | Graphics/text/callback | VFX/SFX cues | Asset dependencies |
+| Scene/run | Start frame | Frames/end | Song section/lyrics | Acting/mouth targets | Camera and layers | Layer sources (H3 sprite / still plate / Swift graphics) | Graphics/text/callback | VFX/SFX cues | Asset dependencies |
 |---|---|---|---|---|---|---|---|---|---|
 
 Repeat an explicit scene block for every row:
 
 - Keyframe/image edit prompts and character references; one character, one pose and flat chroma green per character keyframe.
 - H3 prompt(s), first/end frame, 1080P, generated seconds, exact stem interval, placement interval and no retiming constraint for singing.
-- p5 placement in normalized coordinates, entrances/exits, focal bounds and layer order.
+- Swift graphics placement in normalized coordinates, entrances/exits, focal bounds and layer order.
 - Text copy with timing; research detail and payoff.
 - VFX cue frames/durations; SFX source, time and approximate level.
 - Acceptance: identity, animation, mouth alignment, readable placement and intended joke.

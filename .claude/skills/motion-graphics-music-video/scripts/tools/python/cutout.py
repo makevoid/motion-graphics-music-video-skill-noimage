@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cut a character out of a video (or still) into a transparent PNG sequence, for p5 sprites.
+"""Cut a character out of a video (or still) into a transparent PNG sequence, for native sprite animation.
 
 usage: cutout.py SOURCE OUT_DIR KEY [--box X Y W H] [--seed X Y] [--frames N] [--start N] [--scale S] [--tol T]
   SOURCE  video or image; KEY is "green" (flat chroma-key background), "paper" (cream paper background) or "none"

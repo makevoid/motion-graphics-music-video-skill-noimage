@@ -7,7 +7,7 @@ module Toolkit
   class Operations
     TASKS = {
       "doctor" => "Check local tools; STRICT=1 fails on missing prerequisites",
-      "setup" => "Install gems, npm packages and a local Python venv through Ruby",
+      "setup" => "Install gems and a local Python venv; build Swift graphics through Ruby",
       "fonts:list" => "List installed macOS TTF/OTF files, including Supplemental fonts (local)",
       "fonts:copy" => "Copy selected fonts into this video project: [selection.json] (local)",
       "openapi:fetch" => "Fetch current Fal input schemas (no generation)",
@@ -20,6 +20,9 @@ module Toolkit
       "pipeline:status" => "Show RUN's generated/reviewed steps",
       "pipeline:all" => "Generate and review all configured steps of RUN",
       "anim:render" => "Render sketch: [sketch,out,frames,width,height] (local)",
+      "graphics:build" => "Build native Swift drawing/composition renderer (macOS 14+)",
+      "graphics:render" => "Native scene: [scene.json,out_dir_or_movie,frames,width,height,fps]; PLATE/AUDIO/CODEC optional",
+      "graphics:benchmark" => "Measure native scene: [scene.json,frames,width,height,fps], no files written",
       "anim:preview" => "Preview RUN's overlay frames: [0,48,96] (local)",
       "anim:overlay" => "Render RUN's saved overlay data (local)",
       "anim:prepare" => "Prepare local overlay cues from optional full-song [words.json], without Fal",
@@ -85,6 +88,14 @@ module Toolkit
       when "pipeline:all" then Pipeline::Project.new.steps.each { |s| generate(s); s.new.review! }
       when "anim:render"
         required(a, 3); emit Media::Anim.new.render(a[0], a[1], frames: Integer(a[2]), width: Integer(a[3] || 1920), height: Integer(a[4] || 1080), fps: 24)
+      when "graphics:build" then emit Media::Graphics.new.build
+      when "graphics:render"
+        required(a, 3)
+        emit Media::Graphics.new.render(a[0], a[1], frames: Integer(a[2]), width: Integer(a[3] || 1920), height: Integer(a[4] || 1080), fps: Float(a[5] || 24),
+          plate: ENV["PLATE"], audio: ENV["AUDIO"], codec: ENV["CODEC"], only: ENV["ONLY"]&.split(",")&.map { |v| Integer(v) })
+      when "graphics:benchmark"
+        required(a, 2)
+        emit Media::Graphics.new.render(a[0], "", frames: Integer(a[1]), width: Integer(a[2] || 1920), height: Integer(a[3] || 1080), fps: Float(a[4] || 24), benchmark: true)
       when "anim:preview" then required(a, 1); Pipeline::Steps::Overlay.new.preview!(a.map { |x| Integer(x) })
       when "anim:overlay" then emit Pipeline::Steps::Overlay.new.render!
       when "anim:prepare" then emit Pipeline::Steps::Overlay.new.prepare!(a[0])
@@ -173,11 +184,9 @@ module Toolkit
       out
     end
     def doctor
-      bins = %w[ffmpeg ffprobe magick python3 node swift]
+      bins = %w[ffmpeg ffprobe magick python3 swift]
       checks = bins.to_h { |b| [b, Media::Shell.available?(b)] }
       checks["python_packages"] = system(py.executable, "-c", "import PIL, numpy", out: File::NULL, err: File::NULL)
-      checks["node_packages"] = File.directory?("node_modules/p5") && File.directory?("node_modules/puppeteer-core")
-      checks["chrome"] = [ENV["CHROME_PATH"], "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/usr/bin/google-chrome", "/usr/bin/chromium"].compact.any? { |p| File.file?(p) }
       checks["fal_key"] = !ENV["FAL_AI_API_KEY"].to_s.strip.empty?
       emit checks
       raise "Missing prerequisites; see references/testing.md and run setup" if ENV["STRICT"] == "1" && checks.values.any? { |v| !v }
@@ -185,9 +194,10 @@ module Toolkit
     def setup
       shell = Media::Shell.new
       shell.run(RbConfig.ruby, "-S", "bundle", "install")
-      shell.run("npm", "ci")
       shell.run("python3", "-m", "venv", ".venv") unless File.directory?(".venv")
       shell.run(File.expand_path(".venv/bin/python3"), "-m", "pip", "install", "-r", "requirements.txt")
+      Media::Graphics.new.build
+      Media::Vfx.new.build
       doctor
     end
   end

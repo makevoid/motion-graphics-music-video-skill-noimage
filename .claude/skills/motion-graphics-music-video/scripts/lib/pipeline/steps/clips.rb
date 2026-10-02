@@ -1,6 +1,6 @@
 module Pipeline
   module Steps
-    # Step 4c — character sprites for a p5-animated section: each item is cut out of its background into a transparent PNG
+    # Step 4c — character sprites for a Swift graphics-animated section: each item is cut out of its background into a transparent PNG
     # sequence (output/<run>/04_clips/<name>/NNNN.png) that the overlay sketch loads with Anim.clip(name) and moves itself.
     # prompts/<run>/04_clips.yml lists the items; the source is one of
     #   image / end_image (+ prompt)  an H3 clip from keyframes (as in Shots); audio_at: <song seconds> pins the song from there,

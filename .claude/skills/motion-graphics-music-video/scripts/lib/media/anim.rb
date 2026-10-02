@@ -1,19 +1,11 @@
-require "json"
-require_relative "shell"
+require_relative "graphics"
 
 module Media
-  # Renders p5.js sketches to transparent PNG sequences with anim/render.mjs (headless Chrome via puppeteer-core).
-  # Helpers live in tools/p5/lib/; selected project fonts in tools/p5/fonts/.
-  class Anim < Shell
-    RENDER = File.expand_path("../../tools/p5/render.mjs", __dir__)
-
-    # data: { name => json_path } is exposed to the sketch as Anim.data(name). only: [frame indices] for previews.
-    # Returns the renderer's summary ({ "out", "frames", "width", "height", "fps", "ms" }).
-    def render(sketch, out, width:, height:, fps:, frames:, data: {}, only: nil)
-      args = [RENDER, sketch, "--out", out, "--width", width, "--height", height, "--fps", fps, "--frames", frames]
-      args += ["--only", only.join(",")] if only
-      data.each { |name, path| args += ["--data", "#{name}=#{path}"] }
-      JSON.parse(run("node", *args).lines.last)
+  # Native Swift rendering only. PNG sequences are an explicit preview/export option.
+  class Anim < Graphics
+    def render(scene, out, **options)
+      raise ArgumentError, "Animation scenes must be .json; JavaScript rendering has been removed. See tools/graphics/README.md" unless File.extname(scene).downcase == ".json"
+      super
     end
   end
 end

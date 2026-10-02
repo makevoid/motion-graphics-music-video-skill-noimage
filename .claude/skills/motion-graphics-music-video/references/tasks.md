@@ -11,7 +11,6 @@ motion-graphics-music-video/
     mv.rb                        Ruby CLI/bootstrap/project initializer
     Rakefile                     require Ruby task registry; install delegates
     Gemfile + Gemfile.lock        Ruby dependencies, including RSpec
-    package.json + lockfile      locked p5/Puppeteer dependencies
     requirements.txt             Python dependencies installed by Ruby setup
     lib/
       tasks.rb                   thin rake declarations
@@ -22,7 +21,7 @@ motion-graphics-music-video/
       media/                     Ruby wrappers that shell out
     tools/
       python/                    analysis, cutouts, tracking and audio mixing
-      p5/                        Node renderer, JS animation library, examples; project fonts copied before rendering
+      graphics/                  Swift library/renderer, JSON examples; project fonts copied before rendering
       vfx/                       Swift package and Core Image effects
     spec/                        high-level RSpec contracts and E2E tests
 ```
@@ -44,9 +43,9 @@ ruby scripts/mv.rb --project /absolute/project openapi:fetch
 ruby scripts/mv.rb --project /absolute/project openapi:summary
 ```
 
-`setup` calls Bundler, npm ci and Python venv/pip through Ruby. Install system Ruby, Node 22+, Chrome, FFmpeg/ffprobe and ImageMagick beforehand. On macOS install Swift/Xcode command line tools for VFX. `MV_PYTHON` overrides the local `.venv/bin/python3`; `CHROME_PATH` and `MEDIA_FONT` override detected Chrome/font paths. Configure the plugin's sensitive `FAL_AI_API_KEY` option, or set `FAL_AI_API_KEY` in the environment for direct developer CLI calls; never put the key in prompts/config/commits. `doctor` prints JSON booleans; `STRICT=1` makes missing dependencies fail. Tests require the full selected profile's tools and do not silently skip missing dependencies.
+`setup` calls Bundler and Python venv/pip through Ruby, then builds both Swift packages. Install system Ruby, FFmpeg/ffprobe, ImageMagick and Swift/Xcode command line tools on macOS 14+ beforehand. `MV_PYTHON` overrides the local `.venv/bin/python3`; `MEDIA_FONT` overrides the detected font path. Configure the plugin's sensitive `FAL_AI_API_KEY` option, or set `FAL_AI_API_KEY` in the environment for direct developer CLI calls; never put the key in prompts/config/commits. `doctor` prints JSON booleans; `STRICT=1` makes missing dependencies fail. Tests require the full selected profile's tools and do not silently skip missing dependencies.
 
-`fonts:list` scans installed macOS TTF/OTF files. Just before rendering, `fonts:copy[config/fonts.json]` copies a JSON mapping of project filenames to absolute source paths into the video's `tools/p5/fonts/`. Run with `--project /absolute/video-workspace`; see [Project fonts](animation-audio-vfx.md#project-fonts). Setup does not fetch fonts.
+`fonts:list` scans installed macOS TTF/OTF files. Just before rendering, `fonts:copy[config/fonts.json]` copies a JSON mapping of project filenames to absolute source paths into the video's `tools/graphics/fonts/`. Run with `--project /absolute/video-workspace`; see [Project fonts](animation-audio-vfx.md#project-fonts). Setup does not fetch fonts.
 
 ## New run configuration
 
@@ -93,7 +92,7 @@ Prompt files per run:
 | `04_video.txt` | Single-shot H3 prompt (the Video step reads this stem) |
 | `04_shots.yml` | Ordered shots, images, frames, optional audio/retime |
 | `04_clips.yml` | H3/still/source sprite specifications and chroma/crop |
-| `05_overlay.js` | p5 sketch, rendered through Ruby |
+| `05_overlay.json` | Native scene, rendered through Ruby |
 
 Read each step's `prompt` call if adding a new type. The imported `Music3` wrapper is optional for explicit song-generation requests; the normal skill uses the user's supplied song.
 
@@ -165,7 +164,7 @@ ruby scripts/mv.rb --project /absolute/project 'media:stems[audio/song.wav,audio
 ruby scripts/mv.rb --project /absolute/project 'media:frames[reference.mp4,output/reference_frames,12,480]'
 ruby scripts/mv.rb --project /absolute/project 'media:cuts[reference.mp4,output/cuts.json]'
 ruby scripts/mv.rb --project /absolute/project 'media:mouth[output/s01/04_clips/sing,audio/stems/vocals.wav,0,120,60,40,20]'
-ruby scripts/mv.rb --project /absolute/project 'anim:render[tools/p5/examples/smoke.js,tmp/smoke,48,1920,1080]'
+ruby scripts/mv.rb --project /absolute/project 'anim:render[tools/graphics/examples/futuristic.json,tmp/smoke,48,1920,1080]'
 SFX=finish-sfx ruby scripts/mv.rb --project /absolute/project sfx:gen
 SFX=finish-sfx ruby scripts/mv.rb --project /absolute/project sfx:mix
 VFX=finish-vfx ruby scripts/mv.rb --project /absolute/project vfx:analyze

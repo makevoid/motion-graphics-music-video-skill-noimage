@@ -4,6 +4,7 @@ specs/
 node_modules/
 .venv/
 tools/vfx/.build/
+tools/graphics/.build/
 .bundle/
 audio/
 .env

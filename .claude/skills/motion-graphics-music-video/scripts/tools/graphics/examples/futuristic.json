@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "background": "#050a16",
+  "nodes": [
+    {"type":"grid","width":1920,"height":1080,"spacing":60,"color":"#13455566"},
+    {"type":"group","x":960,"y":520,"children":[
+      {"type":"reticle","radius":265,"color":"#20eaff","tracks":{"rotation":[[0,0],[8,6.283185]]}},
+      {"type":"reticle","radius":210,"color":"#ea43a999","tracks":{"rotation":[[0,0],[8,-3.141593]]}},
+      {"type":"circle","radius":175,"fill":null,"stroke":"#24e8ff33","strokeWidth":2},
+      {"type":"star","radius":90,"inner":24,"rays":4,"fill":"#bafaff","tracks":{"rotation":[[0,0],[8,3.141593]],"scaleX":[[0,0.8],[2,1.15,"outBack"],[4,0.8],[6,1.15,"outBack"],[8,0.8]],"scaleY":[[0,0.8],[2,1.15,"outBack"],[4,0.8],[6,1.15,"outBack"],[8,0.8]]}}
+    ]},
+    {"type":"trace","points":[[90,540],[290,540],[350,600],[590,600]],"color":"#1fffd6","strokeWidth":3,"progress":[[0,0],[2,1,"outCubic"]]},
+    {"type":"trace","points":[[1830,540],[1630,540],[1570,440],[1330,440]],"color":"#f564cc","strokeWidth":3,"progress":[[0.5,0],[2.5,1,"outCubic"]]},
+    {"type":"text","text":"S I G N A L  /  0 1","x":90,"y":145,"size":72,"fill":"#d7faff","reveal":[[0,0],[1.4,1]]},
+    {"type":"text","text":"NEURAL FREQUENCY  •  LIVE TRANSMISSION","x":94,"y":200,"size":21,"fill":"#4badbf"},
+    {"type":"text","text":"48 kHz   /   SYNC LOCKED","x":90,"y":985,"size":24,"fill":"#51d8dc"},
+    {"type":"rect","x":1480,"y":920,"width":350,"height":4,"fill":"#163444","children":[
+      {"type":"rect","width":350,"height":4,"fill":"#36efff","tracks":{"scaleX":[[0,0],[8,1]]}}
+    ]},
+    {"type":"flare","x":1310,"y":282,"radius":65,"color":"#9af4ff","opacity":0.7}
+  ],
+  "effects":[{"name":"CIBloom","parameters":{"inputRadius":12,"inputIntensity":0.45}}]
+}

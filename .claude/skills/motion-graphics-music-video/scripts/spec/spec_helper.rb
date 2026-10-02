@@ -40,6 +40,15 @@ module Fixtures
   def mean_luma(path)
     magick.run("magick", path, "-colorspace", "gray", "-format", "%[fx:mean]", "info:", quiet: true).to_f
   end
+  def native_scene(path, clip: nil, background: nil, move: true, height: 180, speed: 24, x: 10)
+    nodes = []
+    if clip
+      width = height * 320.0 / 180
+      nodes << { type: "sprite", clipName: clip, x: 240 - width / 2, y: 90 - height / 2, width: width, height: height }
+    end
+    nodes << { type: "rect", x: x, y: 10, width: 8, height: 8, fill: "#ffffff", tracks: { x: [[0, x], [2, x + speed * 2]] } } if move
+    json(path, { version: 1, nodes: nodes, background: background }.compact)
+  end
   def approve
     FileUtils.mkdir_p("docs"); FileUtils.mkdir_p("config")
     File.write("docs/PLAN.md", "Synthetic test plan: local fixture media, no paid requests.\n")

@@ -15,7 +15,7 @@ RSpec.describe "Local media end to end", :media do
     expect(File.directory?(File.join(destination,"tools/vfx/.build"))).to be(false)
   end
   it "renders typography, timing and graphics helpers without bundled font files" do
-    result = Media::Anim.new.render(File.join(RT,"tools/p5/examples/smoke.js"), file("smoke"), width: 1920, height: 1080, fps: 24, frames: 48, only: [0,24,47])
+    result = Media::Anim.new.render(File.join(RT,"tools/graphics/examples/futuristic.json"), file("smoke"), width: 1920, height: 1080, fps: 24, frames: 48, only: [0,24,47])
     expect(result["frames"]).to eq(3)
     expect(magick.alpha_coverage(file("smoke/0024.png"))).to be > 0.03
     expect(File.binread(file("smoke/0000.png"))).not_to eq(File.binread(file("smoke/0047.png")))
@@ -36,21 +36,16 @@ RSpec.describe "Local media end to end", :media do
     expect(data["cuts"].map { |c| c["f"] }).to include(24)
     expect(data["frames"]).to eq(48)
   end
-  it "cuts out green, preserves the character and renders it at the intended p5 position" do
+  it "cuts out green, preserves the character and renders it at the intended native position" do
     meta = py.cutout(character, file("sprite"), "green")
     rgba = pixels(file("sprite/0000.png"))
     expect(rgba[0][3]).to eq(0)
     expect(rgba[90 * 320 + 160][3]).to be > 250
     meta["dir"] = file("sprite").delete_prefix("#{RT}/")
     json(file("clips.json"), hero: meta)
-    File.write(file("scene.js"), <<~JS)
-      Anim.sketch({
-        async load() { this.hero = await Anim.clip('hero'); },
-        draw(t, frame) { background('#102030'); this.hero.draw(this.hero.frame(0), 240, 90, 180); noStroke(); fill('#ffffff'); rect(8 + frame * 2, 8, 8, 8); }
-      });
-    JS
+    native_scene(file("scene.json"), clip: "hero", background: "#102030", speed: 48, x: 8)
     renderer = Media::Anim.new
-    renderer.render(file("scene.js"), file("frames"), width: 320, height: 180, fps: 24, frames: 24, data: {clips: file("clips.json")})
+    renderer.render(file("scene.json"), file("frames"), width: 320, height: 180, fps: 24, frames: 24, data: {clips: file("clips.json")})
     png = pixels(file("frames/0000.png"))
     red = png.each_index.select { |i| r,g,b,_ = png[i]; r > 170 && g < 90 && b < 110 }
     xs = red.map { |i| i % 320 }; ys = red.map { |i| i / 320 }
@@ -59,7 +54,7 @@ RSpec.describe "Local media end to end", :media do
     expect(ys.min).to be_within(3).of(36)
     expect(ys.max).to be_within(3).of(144)
     expect(Digest::SHA256.file(file("frames/0000.png")).hexdigest).not_to eq(Digest::SHA256.file(file("frames/0023.png")).hexdigest)
-    renderer.render(file("scene.js"), file("repeat"), width: 320, height: 180, fps: 24, frames: 24, only: [0], data: {clips: file("clips.json")})
+    renderer.render(file("scene.json"), file("repeat"), width: 320, height: 180, fps: 24, frames: 24, only: [0], data: {clips: file("clips.json")})
     expect(File.binread(file("repeat/0000.png"))).to eq(File.binread(file("frames/0000.png")))
     base = video(seconds: 1)
     ff.overlay_frames(base, file("frames"), file("scene.mp4"), fps: 24)

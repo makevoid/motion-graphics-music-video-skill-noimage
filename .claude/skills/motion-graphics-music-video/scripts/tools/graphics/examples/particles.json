@@ -1,0 +1,7 @@
+{
+  "version":1,
+  "background":"#020510",
+  "nodes":[{"type":"text","text":"PARTICLE FIELD / 20K","x":60,"y":100,"size":36,"fill":"#e0fdff"}],
+  "particles":[{"count":20000,"seed":7,"color":"#30cbffb0","size":3,"speed":100,"life":7}],
+  "effects":[{"name":"CIBloom","parameters":{"inputRadius":8,"inputIntensity":0.4}}]
+}

@@ -4,7 +4,7 @@ import Foundation
 
 // The effect chain for one frame. Every active cue adds to a State (how much zoom, blur, glow… this frame), then the frame goes
 // through the Core Image filters once, in a fixed order: camera (punch/zoom/shake/whip) -> blurs (zoom, motion, edge) -> light
-// (glow, flash) -> the p5 light layer (screen blend) -> lens/signal damage (chromatic aberration, interference, old TV) -> dark flash.
+// (glow, flash) -> the native in-memory light layer (screen blend) -> lens/signal damage (chromatic aberration, interference, old TV) -> dark flash.
 //
 //   fx        shape  knobs (defaults)
 //   punch     hit    amt 0.06 (zoom-in fraction), radius 2 (zoom-blur amount; 10+ is a hard hit), x/y anchor 0.5/0.5 (0..1 from top-left)

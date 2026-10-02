@@ -6,7 +6,8 @@ import PackageDescription
 let package = Package(
     name: "mvfx",
     platforms: [.macOS(.v14)],
+    dependencies: [.package(path: "../graphics")],
     targets: [
-        .executableTarget(name: "mvfx", path: "Sources/mvfx")
+        .executableTarget(name: "mvfx", dependencies: [.product(name: "MotionGraphics", package: "graphics")], path: "Sources/mvfx")
     ]
 )
