@@ -52,12 +52,14 @@ struct Options {
               --benchmark              Render without writing; reports wall time and fps
               --software               Force software Core Image (Metal particles still require GPU)
               --analyze audio.wav --out features.json [--fps 24]  Native RMS/peak/spectrum analysis
+              --sfx out.wav --spec '{"synth":"whoosh","duration":0.8}'  Procedural sound effect (see SoundSynth)
             Times are seconds; angles radians; coordinates top-left pixels. No network access.
             """); return
         }
         do {
             let args = Array(CommandLine.arguments.dropFirst())
             if args.first == "--analyze" { try analyze(args) }
+            else if args.first == "--sfx" { try sfx(args) }
             else { try await run(Options(args)) }
         }
         catch { FileHandle.standardError.write(Data("mgraphics: \(error)\n".utf8)); exit(1) }
@@ -79,6 +81,13 @@ struct Options {
         try FileManager.default.createDirectory(at:out.deletingLastPathComponent(),withIntermediateDirectories:true)
         try JSONEncoder().encode(result).write(to:out,options:.atomic)
         print(String(data:try JSONSerialization.data(withJSONObject:["out":output,"frames":result.rms.count,"fps":fps]),encoding:.utf8)!)
+    }
+    static func sfx(_ args: [String]) throws {
+        guard args.count == 4, args[2] == "--spec" else { throw GraphicsError.invalid("--sfx out.wav --spec '{\"synth\":\"whoosh\"}'") }
+        guard let spec = try JSONSerialization.jsonObject(with:Data(args[3].utf8)) as? [String:Any] else { throw GraphicsError.invalid("--spec must be a JSON object") }
+        let sound = try SoundSynth.render(spec)
+        try SoundSynth.writeWAV(sound,to:URL(fileURLWithPath:args[1]))
+        print(String(data:try JSONSerialization.data(withJSONObject:["wav":args[1],"duration":sound.duration,"peak_at":sound.peakAt]),encoding:.utf8)!)
     }
     static func run(_ o: Options) async throws {
         let canvas = try Canvas(width:o.width,height:o.height), compositor = try Compositor(width:o.width,height:o.height,software:o.software)

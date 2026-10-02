@@ -115,14 +115,18 @@ def main():
         if fade and len(s) > fade:
             s[-fade:] *= np.linspace(1, 0, fade)[:, None]
         i0 = int(round(cue["at"] * SR))
-        if i0 >= len(music):
+        if i0 >= len(music) or i0 + len(s) <= 0:
             continue
+        # level from the whole sound, then cut what falls outside the track (a cue may start before 0, e.g. a whoosh
+        # aligned so its peak lands on an early beat: its head is dropped, the rest stays in place)
+        s_db = loudness_db(active(s))
+        peak_raw = 20 * np.log10(np.abs(s).max() + 1e-12)
+        if i0 < 0:
+            s, i0 = s[-i0:], 0
         s = s[: len(music) - i0]
         m_db = max(loudness_db(music[i0: i0 + len(s)]), a.floor_db)
-        s_db = loudness_db(active(s))
         # loudness match, but never past the peak cap (the song is mastered near 0 dBFS, so hot transients would make the limiter
         # duck the music) or past max_gain (a near-silent generation would only bring its noise up)
-        peak_raw = 20 * np.log10(np.abs(s).max() + 1e-12)
         gain_db = min(m_db + cue["rel_db"] - s_db, a.peak_db - peak_raw, a.max_gain_db)
         fx[i0: i0 + len(s)] += s * 10 ** (gain_db / 20)
         report.append({"at": cue["at"], "sound": cue.get("sound"), "music_db": round(m_db, 1), "gain_db": round(gain_db, 1),
@@ -130,7 +134,7 @@ def main():
 
     mix, gs = limit(music + fx)
     for r in report:
-        i0 = int(r["at"] * SR)
+        i0 = max(0, int(r["at"] * SR))
         w = gs[i0: i0 + r.pop("n")]
         r["limiter_db"] = round(20 * np.log10(w.min()), 1) if len(w) else 0.0
     pcm = (mix * 32767).astype(np.int16).tobytes()

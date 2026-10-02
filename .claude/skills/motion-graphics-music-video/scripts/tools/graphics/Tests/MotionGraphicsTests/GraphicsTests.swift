@@ -93,6 +93,29 @@ final class GraphicsTests: XCTestCase {
         let t = try Track([Keyframe(0,0),Keyframe(1,10,easing:.hold),Keyframe(2,20,easing:.hold)])
         XCTAssertEqual(t.value(at:0.99),0); XCTAssertEqual(t.value(at:1),10); XCTAssertEqual(t.value(at:1.5),10); XCTAssertEqual(t.value(at:2),20)
     }
+    func testSoundSynthKindsAreDeterministicShapedAndNormalized() throws {
+        for (kind,d) in SoundSynth.defaults {
+            let a = try SoundSynth.render(["synth":kind,"seed":3]), b = try SoundSynth.render(["synth":kind,"seed":3])
+            XCTAssertEqual(a.left.count,Int(d*SoundSynth.rate),kind); XCTAssertEqual(a.left,b.left,kind)
+            let peak = zip(a.left,a.right).map { max(abs($0),abs($1)) }.max()!
+            XCTAssertEqual(peak,pow(10,-3.0/20),accuracy:1e-6,kind)
+        }
+        XCTAssertNotEqual(try SoundSynth.render(["synth":"whoosh","seed":1]).left,try SoundSynth.render(["synth":"whoosh","seed":2]).left)
+        // The whoosh is loudest near its `peak` fraction; risers and reverse cymbals swell into their end; impacts hit at once.
+        XCTAssertEqual(try SoundSynth.render(["synth":"whoosh","duration":1.0,"peak":0.6]).peakAt,0.6,accuracy:0.12)
+        XCTAssertGreaterThan(try SoundSynth.render(["synth":"riser","duration":1.0]).peakAt,0.85)
+        XCTAssertGreaterThan(try SoundSynth.render(["synth":"reverse","duration":1.0]).peakAt,0.85)
+        XCTAssertLessThan(try SoundSynth.render(["synth":"impact"]).peakAt,0.05)
+        // The whoosh pans from left to right.
+        let w = try SoundSynth.render(["synth":"whoosh","duration":1.0,"pan":[-1,1]]), q = w.left.count/5
+        let energy = { (x: ArraySlice<Double>) in x.map { $0*$0 }.reduce(0,+) }
+        XCTAssertGreaterThan(energy(w.left[q..<2*q]),energy(w.right[q..<2*q])); XCTAssertGreaterThan(energy(w.right[(4*q)...]),energy(w.left[(4*q)...]))
+        XCTAssertThrowsError(try SoundSynth.render(["synth":"kazoo"])); XCTAssertThrowsError(try SoundSynth.render(["synth":"tick","duration":60]))
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("synth-\(UUID()).wav")
+        try SoundSynth.writeWAV(try SoundSynth.render(["synth":"tick"]),to:url)
+        let file = try AVAudioFile(forReading:url)
+        XCTAssertEqual(file.processingFormat.channelCount,2); XCTAssertEqual(file.fileFormat.sampleRate,48_000); XCTAssertEqual(file.length,1680)
+    }
     func testInExpoMirrorsOutExpo() {
         XCTAssertEqual(Easing.inExpo.evaluate(0),0); XCTAssertEqual(Easing.inExpo.evaluate(1),1,accuracy:1e-12)
         XCTAssertEqual(Easing.inExpo.evaluate(0.3),1-Easing.outExpo.evaluate(0.7),accuracy:1e-12)

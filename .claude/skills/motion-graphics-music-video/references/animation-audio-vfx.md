@@ -84,11 +84,15 @@ max_gain_db: 18
 sounds:
   pop: {prompt: "One short dry cartoon cork pop, isolated, no music or voice", duration: 2, seed: 7}
   flatline: {tone: 1000, duration: 1}
+  swoosh: {synth: whoosh, duration: 0.7, peak: 0.75, from: 300, to: 4200, seed: 2}
+  boom: {synth: impact, duration: 0.9, freq: 48}
 cues:
   - {at: 1.25, sound: pop, rel_db: -5, len: 0.25, fade: 0.03}
+  - {at: 3.475, sound: swoosh, rel_db: -12}   # 3.475 = hit 4.0 - peak 0.525 s: the whoosh crests on the hit
+  - {at: 4.0, sound: boom, rel_db: -8}
 ```
 
-Stable Audio SFX is paid; a steady tone is synthesized locally. SFX are cached by prompt, duration, seed and negative prompt. Mix trims leading silence, sets cue loudness relative to music in that window, caps gain and peak-limits. Use exact song times, not cut-relative times. Check dialogue intelligibility, silence jokes and audible but subordinate effects. The final mux can add codec peaks, so listen and measure the delivered file if close to full scale.
+Stable Audio SFX is paid; a steady tone and `synth:` sounds are made locally for free. `synth:` is the Swift `SoundSynth` (`mgraphics --sfx`, [Synth.swift](../scripts/tools/graphics/Sources/MotionGraphics/Synth.swift)): whoosh, riser, reverse, impact, subdrop, tick, type, zap, glitch and shimmer, each with `duration`, `seed` and its own knobs (frequencies, `peak`, `pan`, `q`). It is deterministic, and the cached sidecar records `peak_at`, the loudest moment. A cue's `at` is where the sound starts (leading silence is trimmed), so start a whoosh at `hit - peak_at`, and a riser or reverse at `hit - duration`. Keep whooshes subtle (`rel_db` around -10 to -14) so they sit under the music. SFX are cached by prompt, duration, seed and negative prompt. Mix trims leading silence, sets cue loudness relative to music in that window, caps gain and peak-limits. Use exact song times, not cut-relative times. Check dialogue intelligibility, silence jokes and audible but subordinate effects. The final mux can add codec peaks, so listen and measure the delivered file if close to full scale.
 
 ## Swift VFX and native light layers
 

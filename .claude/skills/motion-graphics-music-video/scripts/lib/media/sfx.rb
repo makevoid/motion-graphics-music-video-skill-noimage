@@ -3,6 +3,7 @@ require "yaml"
 require "fileutils"
 require_relative "shell"
 require_relative "ffmpeg"
+require_relative "graphics"
 
 module Media
   # Sound effects over a finished video (the full-song preview). prompts/<name>/sfx.yml has
@@ -11,6 +12,8 @@ module Media
 #   peak_db / max_gain_db:  caps: a cue never peaks above peak_db (−6) nor gets boosted more than max_gain_db (+18)
   #   sounds: { name => { prompt:, duration:, seed:, negative: } }   generated with fal stable-audio-3 SFX (Fal::Models::StableAudioSfx),
   #           or { tone: Hz, duration: }: a steady sine synthesized with ffmpeg (a monitor flatline; the model only makes rhythmic beeps)
+  #           or { synth: whoosh|riser|reverse|impact|subdrop|tick|type|zap|glitch|shimmer, duration:, seed:, knobs }: procedural,
+  #              free and offline (Swift SoundSynth through mgraphics --sfx; see tools/graphics/Sources/MotionGraphics/Synth.swift)
   #   cues:   [{ at: song s, sound:, rel_db:, rate: (pitch/speed), len: (s, cut + fade), fade: (s) }, ...]
   # Sounds are cached in output/<name>/sounds/<sound>.wav with a sidecar json; a sound is generated again only when its prompt,
   # duration or seed changed (or FORCE=1 with ONLY=a,b). scripts/sfx_mix.py trims their leading silence, sets each cue's level
@@ -40,19 +43,26 @@ module Media
       sounds.filter_map do |sound, spec|
         want = if spec["tone"]
                  { "tone" => spec["tone"], "duration" => spec.fetch("duration", 2) }
+               elsif spec["synth"]
+                 spec.to_h { |k, v| [k.to_s, v] }
                else
                  { "prompt" => spec.fetch("prompt"), "duration" => spec.fetch("duration", 2), "seed" => spec["seed"],
                    "negative_prompt" => spec["negative"] || config["negative"] }
                end
         meta = File.join(dir, "sounds", "#{sound}.json")
         have = File.exist?(meta) && File.exist?(wav(sound)) ? JSON.parse(File.read(meta)) : {}
-        stale = have.slice(*want.keys) != want
+        stale = spec["synth"] ? have.except("peak_at") != want : have.slice(*want.keys) != want
         next unless stale || (force && (only.nil? || only.include?(sound)))
         if spec["tone"]
           # A steady sine (e.g. a monitor flatline, which the SFX model always turns into rhythmic beeps): synthesized, no fal call.
           run("ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=#{want["tone"]}:sample_rate=48000:duration=#{want["duration"]}",
               "-af", "volume=-6dB,afade=t=in:d=0.004,afade=t=out:st=#{want["duration"] - 0.02}:d=0.02", "-ac", "2", wav(sound))
           File.write(meta, JSON.pretty_generate(want))
+          next sound
+        end
+        if spec["synth"]
+          res = Graphics.new.synth(wav(sound), want)
+          File.write(meta, JSON.pretty_generate(want.merge("peak_at" => res["peak_at"])))
           next sound
         end
         warn "[sfx] #{sound} generating…"

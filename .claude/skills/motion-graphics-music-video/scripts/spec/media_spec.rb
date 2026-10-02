@@ -98,4 +98,28 @@ RSpec.describe "Local media end to end", :media do
     diff = ->(from, len) { wet.slice(from,len).zip(dry.slice(from,len)).sum { |a,b| (a-b).abs }.fdiv(len) }
     expect(diff.call(38_000, 5_000)).to be > diff.call(5_000, 5_000) * 3
   end
+  it "synthesizes procedural sound effects offline, caches them by spec and mixes them on their cues" do
+    source = video(seconds: 2)
+    name = "e2e-synth-#{Process.pid}"
+    config_dir = File.join(RT, "prompts", name); FileUtils.mkdir_p(config_dir)
+    sounds = { "swoosh" => { "synth" => "whoosh", "duration" => 0.6, "peak" => 0.7, "seed" => 4 }, "hit" => { "synth" => "impact", "duration" => 0.5 } }
+    write = ->(s) { File.write(File.join(config_dir, "sfx.yml"), YAML.dump({ "source" => source, "out" => file("synth.mp4"), "sounds" => s,
+                                                                         "cues" => [{ "sound" => "swoosh", "at" => -0.3 }, { "sound" => "swoosh", "at" => 0.4, "rel_db" => -2 }, { "sound" => "hit", "at" => 1.2 }] })) }
+    write.(sounds)
+    service = Media::Sfx.new(name)
+    expect(service.generate(client: double("no Fal calls for synth sounds")).sort).to eq(%w[hit swoosh])
+    meta = JSON.parse(File.read(File.join(service.dir, "sounds", "swoosh.json")))
+    expect(meta["peak_at"]).to be_within(0.08).of(0.42)
+    expect(ff.summary(service.wav("swoosh"))[:duration]).to be_within(0.01).of(0.6)
+    expect(Media::Sfx.new(name).generate).to be_empty # cached
+    write.(sounds.merge("hit" => { "synth" => "impact", "duration" => 0.5, "freq" => 70 }))
+    expect(Media::Sfx.new(name).generate).to eq(%w[hit])
+    out, report = Media::Sfx.new(name).mix
+    expect(report["cues"].map { |c| c["sound"] }).to eq(%w[swoosh swoosh hit]) # the first starts before 0: its head is cut, its tail plays
+    dry = ff.run("ffmpeg", "-v", "error", "-i", source, "-ac", "1", "-ar", "48000", "-f", "s16le", "-", quiet: true).unpack("s<*")
+    wet = ff.run("ffmpeg", "-v", "error", "-i", out, "-ac", "1", "-ar", "48000", "-f", "s16le", "-", quiet: true).unpack("s<*")
+    diff = ->(from, len) { wet.slice(from, len).zip(dry.slice(from, len)).sum { |a, b| (a - b).abs }.fdiv(len) }
+    expect(diff.call(57_600, 4_800)).to be > diff.call(4_800, 4_800) * 3
+    expect { Media::Graphics.new.synth(file("bad.wav"), { "synth" => "kazoo" }) }.to raise_error(Media::CommandError, /synth must be one of/)
+  end
 end

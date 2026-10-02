@@ -16,6 +16,7 @@ swift build -c release
 .build/release/mgraphics examples/overlay.json --plate plate.mp4 --out composed.mp4 --width 320 --height 180 --frames 48
 .build/release/mgraphics examples/particles.json --benchmark --width 1920 --height 1080 --frames 120
 .build/release/mgraphics --analyze song.wav --out features.json --fps 24
+.build/release/mgraphics --sfx whoosh.wav --spec '{"synth":"whoosh","duration":0.7,"peak":0.75}'
 swift test
 ```
 
@@ -135,6 +136,8 @@ try await writer.finish()
 PNG and ProRes 4444 MOV preserve transparency. H.264/HEVC are opaque and flatten graphics over black when no plate exists. AVAssetWriter chooses the available encoder; hardware encoding is not guaranteed. Output is SDR sRGB/Rec.709 with 8-bit BGRA encoder buffers; Metal intermediates are half-float, but this is not an HDR mastering pipeline.
 
 `VideoSource` streams with one-frame lookahead, honors orientation, center-crops to fill, and holds the last frame after EOF. It requires nondecreasing times; reopen to seek backward. `VideoWriter` requires contiguous frame indices starting at zero. Fractional fps timestamps use a 600,000-unit timebase. `AudioSource` interleaves audio in the same writer as video: AAC passes through when starting at zero; trimmed ranges and other formats including WAV decode to PCM and encode to AAC in memory. Audio and picture are fed independently with bounded writer backpressure. Longer audio is trimmed and remaining video after shorter audio is silent. `AudioMuxer` remains an optional utility for already-existing movies; the default workflow does not need a second mux file. Explicit `--audio` replaces inherited plate audio.
+
+`SoundSynth` (Synth.swift) renders procedural sound effects offline and deterministically: whoosh, riser, reverse, impact, subdrop, tick, type, zap, glitch, shimmer (48 kHz stereo WAV, -3 dBFS peak). It prints `peak_at` so a cue can line the loudest moment up with a beat; Ruby uses it for `synth:` sounds in `sfx.yml`.
 
 `AudioAnalyzer` streams PCM and uses Accelerate for RMS, peaks and spectral bands, with absolute sample boundaries to prevent frame-rate drift. DFT output is a visual control signal, not calibrated loudness. `samplesData` accepts a numeric array: extract `rms` from analyzer output for a whole-song waveform or use Swift to select per-frame bands. Existing Python beat/onset tools remain available; automatic beat detection is not part of the native analyzer.
 
