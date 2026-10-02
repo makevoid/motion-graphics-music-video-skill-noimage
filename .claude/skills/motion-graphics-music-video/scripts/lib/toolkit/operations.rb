@@ -32,6 +32,7 @@ module Toolkit
       "audio:hits" => "Kick/snare/hat (+808 notes) attack times on the grid: [drums.wav,out.json,beatmap.json,bass.wav] (scipy)",
       "audio:vocals" => "Vocal lines/phrases/onsets from a vocal stem: [vocals.wav,out.json,beatmap.json] (scipy)",
       "audio:sections" => "Per-bar features + drop/build/breakdown sections: [audio,out.json,beatmap.json,hits.json,vocals.json] (scipy)",
+      "audio:excerpt" => "Song excerpt with fade-out: [audio,out.wav,from,seconds,fade_seconds] (local)",
       "audio:transcribe" => "Word timestamps with Fal Whisper: [audio,out.json] (paid)",
       "audio:transcribe_local" => "Local mlx-whisper word timestamps: [audio,out.json,from,seconds] (Apple Silicon, uv; free)",
       "media:stems" => "Fal Demucs: [audio,out_dir,vocals,...] (paid)",
@@ -113,6 +114,9 @@ module Toolkit
       when "audio:hits" then required(a, 2); emit py.music_map("hits", a[0], a[1], beats: a[2], bass: a[3])
       when "audio:vocals" then required(a, 2); emit py.music_map("vocals", a[0], a[1], beats: a[2])
       when "audio:sections" then required(a, 3); emit py.music_map("sections", a[0], a[1], beats: a[2], hits: a[3], vocals: a[4])
+      when "audio:excerpt"
+        required(a, 4); out = ff.excerpt(a[0], a[1], from: Float(a[2]), seconds: Float(a[3]), fade: Float(a[4] || 0))
+        emit(path: out, duration: ff.duration(out))
       when "audio:transcribe"
         required(a, 2); c = Fal::Client.new; result = Fal::Models::Whisper.new(client: c).transcribe(audio_url: c.upload(a[0]), chunk_level: "word")
         FileUtils.mkdir_p(File.dirname(a[1])); File.write(a[1], JSON.pretty_generate(result.output)); emit(path: a[1], request_id: result.request_id)

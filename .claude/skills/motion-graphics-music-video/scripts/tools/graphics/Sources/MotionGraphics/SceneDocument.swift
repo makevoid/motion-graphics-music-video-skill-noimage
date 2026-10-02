@@ -51,7 +51,7 @@ public final class SceneDocument {
         let keys = try list.map { row -> Keyframe in
             guard (2...3).contains(row.count), let t = row[0] as? Double, let v = row[1] as? Double else { throw GraphicsError.invalid("Invalid keyframe") }
             let ease: Easing
-            if row.count == 3 { guard let name = row[2] as? String, let e = Easing(rawValue:name) else { throw GraphicsError.invalid("Unknown easing") }; ease = e } else { ease = .linear }
+            if row.count == 3 { guard let name = row[2] as? String, let e = Easing(rawValue:name) else { throw GraphicsError.invalid("Unknown easing \(row[2]) (use linear, inCubic, outCubic, inOutCubic, inExpo, outExpo, outBack, outElastic, smooth or hold)") }; ease = e } else { ease = .linear }
             return Keyframe(t,v,easing:ease)
         }
         do { return try Track(keys) }

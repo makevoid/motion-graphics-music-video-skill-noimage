@@ -171,6 +171,7 @@ ruby scripts/mv.rb --project /absolute/project 'audio:beatmap[audio/song.wav,aud
 ruby scripts/mv.rb --project /absolute/project 'audio:hits[audio/stems/drums.wav,audio/map/hits.json,audio/map/beatmap.json,audio/stems/bass.wav]'
 ruby scripts/mv.rb --project /absolute/project 'audio:vocals[audio/stems/vocals.wav,audio/map/vocals.json,audio/map/beatmap.json]'
 ruby scripts/mv.rb --project /absolute/project 'audio:sections[audio/song.wav,audio/map/sections.json,audio/map/beatmap.json,audio/map/hits.json,audio/map/vocals.json]'
+ruby scripts/mv.rb --project /absolute/project 'audio:excerpt[audio/song.wav,audio/excerpt.wav,23,114.5,1.7]'
 ruby scripts/mv.rb --project /absolute/project 'media:mouth[output/s01/04_clips/sing,audio/stems/vocals.wav,0,120,60,40,20]'
 ruby scripts/mv.rb --project /absolute/project 'anim:render[tools/graphics/examples/futuristic.json,tmp/smoke,48,1920,1080]'
 SFX=finish-sfx ruby scripts/mv.rb --project /absolute/project sfx:gen
@@ -183,6 +184,8 @@ ruby scripts/mv.rb --project /absolute/project 'media:twitter[output/finished.mp
 ```
 
 `media:montage` tiles frames into a labelled contact strip (columns, tile width) for frame-exact sync review. `audio:transcribe_local` (mlx-whisper; `MV_WHISPER_MODEL`, `MV_WHISPER_LANG`) and `media:stems_local` (Demucs `htdemucs` on MPS; `MV_DEMUCS_MODEL`; writes vocals, no_vocals, drums, bass and other in one pass) are free local alternatives run through `uv`; their timestamps refer to the whole song. Sung or heavily processed vocals can still hallucinate words; verify by listening.
+
+`audio:excerpt[audio,out.wav,from,seconds,fade_seconds]` cuts the render soundtrack: `seconds` long from `from`, silence-padded if the song is shorter, with an optional fade-out over the last `fade_seconds`; 44.1 kHz stereo. Pass it as `AUDIO=` to `graphics:render` so the video and soundtrack share frame 0.
 
 **Music map (sync timing).** `audio:map` runs `tools/python/music_map.py` (numpy + scipy through `uv`, free, ~2 s per song) and writes four JSON files; the single-purpose tasks write one each. Times are seconds of the input file; `f` is the 24fps frame.
 

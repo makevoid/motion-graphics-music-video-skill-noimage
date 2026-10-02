@@ -7,7 +7,7 @@ public struct FrameTime {
     public init(frame: Int, fps: Double) { precondition(fps.isFinite && fps > 0); self.frame = frame; self.fps = fps }
 }
 public enum Easing: String, Codable {
-    case linear, inCubic, outCubic, inOutCubic, outExpo, outBack, outElastic, smooth, hold
+    case linear, inCubic, outCubic, inOutCubic, inExpo, outExpo, outBack, outElastic, smooth, hold
     public func evaluate(_ x: Double) -> Double {
         let x = min(1,max(0,x))
         switch self {
@@ -15,6 +15,7 @@ public enum Easing: String, Codable {
         case .inCubic: return x*x*x
         case .outCubic: return 1-pow(1-x,3)
         case .inOutCubic: return x < 0.5 ? 4*x*x*x : 1-pow(-2*x+2,3)/2
+        case .inExpo: return x == 0 ? 0 : pow(2,10*x-10)
         case .outExpo: return x == 1 ? 1 : 1-pow(2,-10*x)
         case .outBack: return 1+2.70158*pow(x-1,3)+1.70158*pow(x-1,2)
         case .outElastic: return x == 0 || x == 1 ? x : pow(2,-10*x)*sin((x*10-0.75)*2 * .pi/3)+1

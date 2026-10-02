@@ -95,6 +95,17 @@ module Media
       out
     end
 
+    # Song excerpt as 44.1k stereo (format from `out`'s extension): exactly `seconds` from `from` (silence-padded past the
+    # end), with an optional fade-out over the last `fade` seconds (e.g. one bar, so a cut ending resolves).
+    def excerpt(audio, out, from:, seconds:, fade: 0)
+      filters = ["apad=whole_dur=#{seconds}"]
+      filters << "afade=t=out:st=#{(seconds - fade).round(4)}:d=#{fade}" if fade.positive?
+      FileUtils.mkdir_p(File.dirname(out))
+      run("ffmpeg", "-y", "-v", "error", "-ss", from.to_s, "-i", audio, "-vn", "-map", "0:a:0", "-af", filters.join(","),
+          "-t", seconds.to_s, "-ac", "2", "-ar", "44100", out)
+      out
+    end
+
     # Pad (with silence) or trim audio to exactly `seconds`, with a short fade-out (fade: 0 for none).
     def fit_audio(audio, out, seconds:, fade: 0.4)
       run("ffmpeg", "-y", "-v", "error", "-i", audio,

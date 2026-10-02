@@ -93,6 +93,11 @@ final class GraphicsTests: XCTestCase {
         let t = try Track([Keyframe(0,0),Keyframe(1,10,easing:.hold),Keyframe(2,20,easing:.hold)])
         XCTAssertEqual(t.value(at:0.99),0); XCTAssertEqual(t.value(at:1),10); XCTAssertEqual(t.value(at:1.5),10); XCTAssertEqual(t.value(at:2),20)
     }
+    func testInExpoMirrorsOutExpo() {
+        XCTAssertEqual(Easing.inExpo.evaluate(0),0); XCTAssertEqual(Easing.inExpo.evaluate(1),1,accuracy:1e-12)
+        XCTAssertEqual(Easing.inExpo.evaluate(0.3),1-Easing.outExpo.evaluate(0.7),accuracy:1e-12)
+        XCTAssertNotNil(Easing(rawValue:"inExpo"))
+    }
     func testTrimDrawsOnlyThePartialOutlineAndBoilIsDeterministic() throws {
         let line = ShapeNode(.polygon([CGPoint(x:0,y:8),CGPoint(x:64,y:8)],closed:false),style:Style(fill:nil,stroke:.white,lineWidth:4))
         line.tracks["trimEnd"] = try Track([Keyframe(0,0),Keyframe(1,1)])
@@ -129,7 +134,7 @@ final class GraphicsTests: XCTestCase {
         let p = Projection(base:.identity,pivot:.zero,rx:1,ry:0)
         let (top,ts) = p.project(local:CGPoint(x:100,y:-100))!, (bottom,bs) = p.project(local:CGPoint(x:100,y:100))!
         XCTAssertLessThan(ts,1); XCTAssertGreaterThan(bs,1); XCTAssertLessThan(top.x,100); XCTAssertGreaterThan(bottom.x,100)
-        XCTAssertNil(Projection(base:.identity,pivot:.zero,rx:0,ry:0,tz:-1390).project(local:.zero))
+        XCTAssertNil(Projection(base:.identity,pivot:.zero,rx:0,ry:0,tz:-1340).project(local:.zero))
         let nested = Projection(base:.identity,pivot:.zero,rx:0,ry:0.5,outer:p)
         XCTAssertNotEqual(nested.map(device:CGPoint(x:50,y:-50))!.0,p.map(device:CGPoint(x:50,y:-50))!.0)
         // A 160px square tipped back: the far (top) edge narrows inside x=20, the near (bottom) edge widens past it.
@@ -138,6 +143,23 @@ final class GraphicsTests: XCTestCase {
         let c = try Canvas(width:200,height:200); try scene.draw(on:c,at:FrameTime(frame:0,fps:24))
         XCTAssertEqual(pixel(c,18,140)[3],255); XCTAssertEqual(pixel(c,18,65)[3],0)
         XCTAssertEqual(pixel(c,100,40)[3],0); XCTAssertEqual(pixel(c,100,100)[3],255)
+    }
+    func testFloorRunningBehindTheCameraIsClippedNotDropped() throws {
+        // A floor tipped almost flat whose near rows pass behind the viewer: the visible part must still draw.
+        let p = Projection(base:.identity,pivot:CGPoint(x:100,y:100),rx:1.5,ry:0,ty:60,focal:200)
+        let open = Path(); open.move(100,-400); open.line(100,400)
+        let (clipped,_) = p.project(open,ctm:.identity)!
+        let pts = clipped.flattened().flatMap(\.points)
+        XCTAssertEqual(pts.count,2); XCTAssertTrue(pts.allSatisfy { $0.y > 100 })
+        let ring = p.project(.rect(CGRect(x:60,y:-400,width:80,height:800)),ctm:.identity)!.0.flattened()
+        XCTAssertEqual(ring.count,1); XCTAssertTrue(ring[0].closed); XCTAssertEqual(ring[0].points.count,4)
+        XCTAssertNil(p.project(.rect(CGRect(x:60,y:300,width:80,height:100)),ctm:.identity))
+        let scene = Scene(), plane = PlaneNode(); plane.position = CGPoint(x:100,y:100); plane.anchor = CGPoint(x:100,y:100)
+        plane.rotationX = 1.5; plane.panY = 60; plane.perspective = 200
+        let grid = Designs.grid(width:200,height:800,spacing:20,color:.white); grid.position = CGPoint(x:0,y:-400)
+        try plane.add(grid); try scene.root.add(plane)
+        let c = try Canvas(width:200,height:200); try scene.draw(on:c,at:FrameTime(frame:0,fps:24))
+        XCTAssertGreaterThan((0..<200).filter { pixel(c,100,$0)[3] > 0 }.count,40)
     }
     func testDocumentPlaneTextPathRingsAndSkew() throws {
         let dir = try temp(), url = dir.appendingPathComponent("scene.json")
