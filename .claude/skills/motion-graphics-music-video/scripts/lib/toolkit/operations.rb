@@ -2,7 +2,6 @@ require "etc"
 require_relative "../workflow/approval"
 require_relative "../workflow/waves"
 require_relative "../workflow/journal"
-require_relative "../pipeline/reference_importer"
 require_relative "fonts"
 module Toolkit
   class Operations
@@ -11,15 +10,15 @@ module Toolkit
       "setup" => "Install gems and a local Python venv; build Swift graphics through Ruby",
       "fonts:list" => "List installed macOS TTF/OTF files, including Supplemental fonts (local)",
       "fonts:copy" => "Copy selected fonts into this video project: [selection.json] (local)",
-      "openapi:fetch" => "Fetch current Fal input schemas (no generation)",
+      "openapi:fetch" => "Fetch current Fal audio input schemas (no generation)",
       "openapi:summary" => "Print saved Fal schema summaries",
       "plan:approve" => "Record actual user approval: NOTE='approved wording'",
       "work:next" => "Allocate/resume next dependency-ready wave; SIZE=2/3..4/4..8/6..10",
       "work:accept" => "Accept reviewed job: JOB=id EVIDENCE=review.md",
       "work:log" => "Append worker progress: AGENT=id EVENT=event MESSAGE=text; LOG_DIR optional",
       "work:watch" => "Show recent worker log entries; LOG_DIR and LIMIT optional",
-      "pipeline:status" => "Show RUN's generated/reviewed steps",
-      "pipeline:all" => "Generate and review all configured steps of RUN",
+      "pipeline:status" => "Show RUN's audio/composition steps",
+      "pipeline:all" => "Process/review configured audio and Swift composition steps of RUN (may call Fal audio)",
       "anim:render" => "Render sketch: [sketch,out,frames,width,height] (local)",
       "graphics:build" => "Build native Swift drawing/composition renderer (macOS 14+)",
       "graphics:render" => "Native scene: [scene.json,out_dir_or_movie,frames,width,height,fps]; PLATE/AUDIO/CODEC/SUPERSAMPLE/BITRATE/GLOW (gpu default, cg)/JOBS (parallel chunks, default cores-2) optional",
@@ -61,7 +60,6 @@ module Toolkit
       "media:twitter" => "X/Twitter upload encode for any video [video,out.mp4]: fit 16:9/9:16/1:1 box, <=60 fps, H.264 High yuv420p BT.709, closed 1 s GOPs, AAC-LC, faststart; CRF (16), MAX_MBPS (24, X max 25), TUNE (e.g. animation) optional; reports free/Premium fit",
       "media:faststart" => "Lossless upload copy [video,out.mp4]: streams copied, moov moved to the front (no re-encode)",
       "media:upload" => "Upload [path] to Fal CDN",
-      "ref:import" => "Reuse existing hosted identity [new_run,local_image,original_manifest.json] (no upload)",
       "vfx:build" => "Build Swift Core Image renderer (macOS)",
       "vfx:analyze" => "Analyze VFX source beats and cuts; VFX=name",
       "vfx:stills" => "Preview cued VFX frames [0,24,...]; VFX=name",
@@ -73,7 +71,7 @@ module Toolkit
       "adopt" => "Recover completed Fal request [step,request_id]",
       "pick" => "Restore archived request [step,index]",
       "import" => "Copy step from another run [step,source_run]",
-      "test" => "Run RSpec suite; PROFILE=all|core|media|swift|live"
+      "test" => "Run RSpec suite; PROFILE=all|core|media|swift"
     }.freeze
     def ff = @ff ||= Media::FFmpeg.new
     def py = @py ||= Media::Python.new
@@ -169,7 +167,6 @@ module Toolkit
         emit ff.twitter(*a, crf: Float(ENV["CRF"] || 16), max_mbps: Float(ENV["MAX_MBPS"] || 24), tune: ENV["TUNE"])
       when "media:faststart" then required(a, 2); emit ff.faststart(*a)
       when "media:upload" then required(a, 1); emit(url: Fal::Client.new.upload(a[0]))
-      when "ref:import" then required(a, 3); emit Pipeline::ReferenceImporter.new.import(run: a[0], image: a[1], manifest: a[2])
       when "vfx:build" then emit Media::Vfx.new.build
       when "vfx:analyze" then emit Media::Vfx.new.analyze
       when "vfx:stills" then required(a, 1); emit Media::Vfx.new.stills(a.map { |x| Integer(x) })
@@ -225,7 +222,6 @@ module Toolkit
       bins = %w[ffmpeg ffprobe magick python3 swift]
       checks = bins.to_h { |b| [b, Media::Shell.available?(b)] }
       checks["python_packages"] = system(py.executable, "-c", "import PIL, numpy", out: File::NULL, err: File::NULL)
-      checks["fal_key"] = !ENV["FAL_AI_API_KEY"].to_s.strip.empty?
       emit checks
       raise "Missing prerequisites; see references/testing.md and run setup" if ENV["STRICT"] == "1" && checks.values.any? { |v| !v }
     end

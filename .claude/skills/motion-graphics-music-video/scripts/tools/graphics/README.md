@@ -29,7 +29,7 @@ ruby mv.rb 'graphics:benchmark[tools/graphics/examples/particles.json,120,1920,1
 ruby mv.rb 'anim:render[tools/graphics/examples/overlay.json,output/frames,48,320,180]'
 ```
 
-`Media::Anim` accepts native `.json` scenes only. Browser rendering and its dependencies have been removed. A project's `05_overlay.json` works with `anim:preview` and `anim:overlay`, including cue data and native audio. `anim:overlay` writes one final movie; it does not generate PNG layers or an intermediate still-plate movie. Only explicit previews/PNG exports create images. Keep only one `05_overlay.*` file per run. `graphics:render` also accepts `PLATE`, `AUDIO`, `CODEC`, and `ONLY` environment variables. New video files are never silently overwritten.
+`Media::Anim` accepts native `.json` scenes only. Browser rendering and its dependencies have been removed. Use scene JSON with `graphics:preview` for range previews and `graphics:render` for the final movie. These stream picture and audio directly; only explicit stills/PNG exports create frame images. `graphics:render` also accepts `PLATE`, `AUDIO`, `CODEC`, and `ONLY` environment variables. New video files are never silently overwritten.
 
 ## Scene files
 

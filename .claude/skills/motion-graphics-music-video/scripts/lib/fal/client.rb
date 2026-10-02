@@ -61,7 +61,7 @@ module Fal
     end
 
     # Re-fetch a completed request's output (queue results are addressed by app id,
-    # i.e. the first two path segments: fal-ai/nano-banana-2/edit -> fal-ai/nano-banana-2).
+    # i.e. the first two path segments, such as fal-ai/stable-audio-3).
     def result(endpoint_id, request_id)
       get_json("#{QUEUE_HOST}/#{endpoint_id.split("/").first(2).join("/")}/requests/#{request_id}")
     end

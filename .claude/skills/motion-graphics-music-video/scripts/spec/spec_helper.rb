@@ -6,7 +6,7 @@ require "yaml"
 require "rbconfig"
 require "open3"
 require "digest"
-require_relative "../lib/fal_mv_gen"
+require_relative "../lib/runtime"
 require_relative "../lib/toolkit/operations"
 RT = File.expand_path("..", __dir__)
 SKILL = File.file?(File.expand_path("../SKILL.md", RT)) ? File.expand_path("..", RT) : File.join(RT, ".skill")
@@ -51,8 +51,8 @@ module Fixtures
   end
   def approve
     FileUtils.mkdir_p("docs"); FileUtils.mkdir_p("config")
-    File.write("docs/PLAN.md", "Synthetic test plan: local fixture media, no paid requests.\n")
-    Workflow::Approval.new.record!("RSpec fixture approval; mocked network only")
+    File.write("docs/PLAN.md", "Synthetic test plan: local fixture media.\n")
+    Workflow::Approval.new.record!("RSpec fixture approval; local rendering")
   end
   def with_workspace
     Dir.mktmpdir("mv-spec-") { |dir| Dir.chdir(dir) { yield dir } }
@@ -66,7 +66,7 @@ RSpec.configure do |c|
   c.order = :defined
   c.before do
     @saved_env = ENV.to_h
-    %w[RUN ONLY FORCE RECUT NEW_REQUEST VIDEO_RES].each { |k| ENV.delete(k) }
+    %w[RUN ONLY FORCE NEW_REQUEST SFX VFX].each { |k| ENV.delete(k) }
   end
   c.after do
     ENV.replace(@saved_env)

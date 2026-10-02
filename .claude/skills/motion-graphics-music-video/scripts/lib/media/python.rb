@@ -33,7 +33,7 @@ module Media
       call("cutout.py", *args.map(&:to_s))
     end
 
-    # Local word timestamps through mlx-whisper in an ephemeral uv environment (Apple Silicon; no Fal call).
+    # Local word timestamps through mlx-whisper in an ephemeral uv environment (Apple Silicon; local processing).
     # Returns Whisper-style { "text", "chunks" => [{ "text", "timestamp" => [s, e] }] } in whole-song seconds.
     def transcribe_local(audio, from: 0.0, seconds: 0.0, model: ENV["MV_WHISPER_MODEL"] || "mlx-community/whisper-large-v3-turbo", language: ENV["MV_WHISPER_LANG"].to_s)
       raise CommandError, "uv is required for local transcription (https://docs.astral.sh/uv/)" unless Shell.available?("uv")
@@ -41,7 +41,7 @@ module Media
                      "python", File.join(SCRIPTS, "transcribe_local.py"), audio, from.to_s, seconds.to_s, model, language, quiet: true).lines.last)
     end
 
-    # Music map (tools/python/music_map.py, numpy + scipy in an ephemeral uv environment; no Fal call).
+    # Music map (tools/python/music_map.py, numpy + scipy in an ephemeral uv environment; local processing).
     # cmd: "all" (input song, out dir; stems: dir with drums/bass/vocals/no_vocals.wav), "beats", "hits", "vocals",
     # "sections" (out .json). opts: drums:, bass:, beats:, hits:, vocals:, stems: paths; fps:, tempo: auto|constant|local.
     def music_map(cmd, input, out, **opts)
@@ -51,7 +51,7 @@ module Media
                      "python", File.join(SCRIPTS, "music_map.py"), cmd, input, out, *flags, quiet: true).lines.last)
     end
 
-    # Local Demucs stem WAVs (vocals, no_vocals, drums, bass, other) (full-song aligned) through an ephemeral uv environment; no Fal call.
+    # Local Demucs stem WAVs (vocals, no_vocals, drums, bass, other) (full-song aligned) through an ephemeral uv environment; local processing.
     def stems_local(audio, out, from: 0.0, seconds: 0.0, model: ENV["MV_DEMUCS_MODEL"] || "htdemucs")
       raise CommandError, "uv is required for local stems (https://docs.astral.sh/uv/)" unless Shell.available?("uv")
       JSON.parse(run("uv", "run", "--quiet", "--no-project", "--python", "3.12", "--with", "demucs", "--with", "soundfile",

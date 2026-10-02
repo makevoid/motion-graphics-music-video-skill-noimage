@@ -1,6 +1,6 @@
 {
   "name": "makevoid-music-video",
-  "description": "Motion graphics music video plugin by makevoid.",
+  "description": "Native macOS motion graphics music video plugin by makevoid.",
   "owner": {
     "name": "makevoid",
     "url": "https://github.com/makevoid"
@@ -9,7 +9,7 @@
     {
       "name": "motion-graphics-music-video",
       "source": "./",
-      "description": "Create animated music videos with Fal generation, p5 motion graphics, audio editing, and Swift VFX."
+      "description": "Create music videos on macOS with native Swift graphics, local audio analysis and procedural SFX/VFX."
     }
   ]
 }

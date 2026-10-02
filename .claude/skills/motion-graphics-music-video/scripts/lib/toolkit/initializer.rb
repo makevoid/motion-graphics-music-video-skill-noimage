@@ -23,7 +23,7 @@ module Toolkit
         FileUtils.mkdir_p(target)
         %w[SKILL.md references assets].each { |entry| FileUtils.cp_r(File.join(origin, entry), target) }
       end
-      %w[audio config docs prompts output].each { |d| FileUtils.mkdir_p(File.join(project, d)) }
+      %w[audio config docs prompts scenes output].each { |d| FileUtils.mkdir_p(File.join(project, d)) }
       ext = File.extname(song)
       FileUtils.cp(song, File.join(project, "audio", "source#{ext}"))
       FileUtils.cp(prompt, File.join(project, "docs", "BRIEF.md"))

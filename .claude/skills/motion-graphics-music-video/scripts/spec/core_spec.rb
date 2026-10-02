@@ -12,13 +12,13 @@ RSpec.describe "Skill contracts and Ruby entry", :core do
       end
     end
   end
-  it "shows help without credentials and lists executable tasks" do
-    out, err, status = cli("--help", env: {"FAL_AI_API_KEY" => ""})
+  it "shows help and lists local executable tasks" do
+    out, err, status = cli("--help")
     expect(status.exitstatus).to eq(0), err
     expect(out).to include("--project", "Exit:")
     out, err, status = cli("-T")
     expect(status.exitstatus).to eq(0), err
-    expect(out).to include("gen:ref_base", "media:mouth", "vfx:render", "test")
+    expect(out).to include("graphics:preview", "graphics:render", "media:mouth", "vfx:render", "test")
   end
   it "rejects incomplete intake without prompting or overwriting an existing project" do
     _, _, status = cli("init")
@@ -29,6 +29,12 @@ RSpec.describe "Skill contracts and Ruby entry", :core do
     expect(status.exitstatus).to eq(0), err
     expect(JSON.parse(out)["project"]).to eq(dir)
     expect(File.read(File.join(dir, "docs/BRIEF.md"))).to eq("Dancing robot")
+    out, err, status = cli("--project", dir, "-T")
+    expect(status.exitstatus).to eq(0), err
+    expect(out).to include("graphics:preview", "audio:map", "sfx:gen")
+    _, err, status = cli("--project", dir, "gen:ref_base")
+    expect(status.success?).to be(false)
+    expect(err).to include("Don't know how to build task")
     _, _, status = cli("init", "--project", dir, "--song", file("song.wav"), "--prompt-file", file("brief.md"))
     expect(status.exitstatus).to eq(2)
   end
@@ -105,72 +111,20 @@ RSpec.describe "Skill contracts and Ruby entry", :core do
   end
 end
 
-RSpec.describe "Fal HTTP and model contracts", :core do
-  it "caches CDN upload URLs by bytes and downloads real response bytes" do
-    with_workspace do
-      File.write("image.png", "test image bytes")
-      Excon.defaults[:mock] = true
-      calls = 0
-      Excon.stub({method: :post, host: "rest.alpha.fal.ai"}) do
-        calls += 1
-        {status:200, body: JSON.generate(upload_url:"https://upload.test/file",file_url:"https://cdn.test/file")}
-      end
-      Excon.stub({method: :put, host:"upload.test"},{status:200,body:""})
-      Excon.stub({method: :get, host:"cdn.test"},{status:200,body:"downloaded bytes"})
-      client = Fal::Client.new(api_key:"fixture")
-      expect(client.upload("image.png")).to eq("https://cdn.test/file")
-      expect(client.upload("image.png")).to eq("https://cdn.test/file")
-      expect(calls).to eq(1)
-      client.download("https://cdn.test/file","download.png")
-      expect(File.read("download.png")).to eq("downloaded bytes")
+RSpec.describe "Native default and removed visual generation", :core do
+  it "rejects removed image and video generation commands" do
+    %w[gen:ref_base gen:ref_torn gen:keyframes gen:video gen:shots gen:clips ref:import].each do |task|
+      _, err, status = cli(task)
+      expect(status.success?).to be(false), "#{task} unexpectedly ran"
+      expect(err).to include("Don't know how to build task")
     end
   end
-  it "keeps the receipt after a polling interruption and recovers without another POST" do
-    with_workspace do
-      approve
-      client = Fal::Client.new(api_key:"fixture")
-      expect(client).to receive(:submit).once.and_return({"request_id"=>"resume-1","status_url"=>"status","response_url"=>"result"})
-      allow(client).to receive(:wait).and_raise(Fal::Error,"timeout")
-      expect { client.run("test/endpoint",{prompt:"once"}) }.to raise_error(Fal::Error,/timeout/)
-      allow(client).to receive(:wait).and_return(true)
-      allow(client).to receive(:get_json).with("result").and_return({"ok"=>true})
-      expect(client.run("test/endpoint",{prompt:"once"})).to eq(["resume-1",{"ok"=>true}])
-    end
-  end
-  it "submits, polls, fetches and resumes identical paid requests without resubmitting" do
-    with_workspace do
-      approve
-      Excon.defaults[:mock] = true
-      submitted = []
-      Excon.stub({method: :post, host: "queue.fal.run"}) do |req|
-        submitted << JSON.parse(req[:body])
-        {status: 200, body: JSON.generate(request_id: "job-1", status_url: "https://queue.fal.run/status", response_url: "https://queue.fal.run/result")}
-      end
-      Excon.stub({method: :get, path: "/status"}, {status: 200, body: '{"status":"COMPLETED"}'})
-      Excon.stub({method: :get, path: "/result"}, {status: 200, body: '{"images":[{"url":"https://cdn.test/image.png"}]}'})
-      client = Fal::Client.new(api_key: "test-only", poll_interval: 0)
-      2.times { expect(Fal::Models::GptImage25.new(client: client).generate(prompt: "fixture").request_id).to eq("job-1") }
-      expect(submitted.size).to eq(1)
-      expect(submitted.first).to include("quality" => "xhigh", "output_format" => "png")
-      expect(Dir["output/requests/*.json"].size).to eq(1)
-    end
-  end
-  it "validates endpoint inputs against a saved schema before submission" do
-    with_workspace do
-      path = Fal::OpenAPI.spec_path(Fal::Models::H3MaxImageToVideo.endpoint)
-      json(path, components: {schemas: {Input: {required: ["prompt"], properties: {prompt: {type: "string"}, resolution: {enum: ["1080P"]}}}}})
-      client = double("no network")
-      expect(client).not_to receive(:run)
-      expect { Fal::Models::H3MaxImageToVideo.new(client: client).animate(prompt: "x", image_url: "https://test/image", duration: 5, resolution: "bad") }.to raise_error(ArgumentError)
-    end
-  end
-  it "surfaces terminal queue errors and never calls a paid endpoint before approval" do
-    with_workspace do
-      client = Fal::Client.new(api_key: "test-only", poll_interval: 0)
-      expect(client).not_to receive(:submit)
-      expect { client.run("test/model", {}) }.to raise_error(/approval missing/)
-      allow(client).to receive(:get_json).and_return({"status" => "COMPLETED", "error" => "generation rejected"})
-      expect { client.wait("https://test/status") }.to raise_error(Fal::Error, /generation rejected/)
-    end
+
+  it "checks local prerequisites without requiring a generation credential" do
+    service = Toolkit::Operations.new
+    allow(Media::Shell).to receive(:available?).and_return(true)
+    allow(service).to receive(:system).and_return(true)
+    ENV["STRICT"] = "1"
+    expect { service.doctor }.to output(/"python_packages": true/).to_stdout
   end
 end

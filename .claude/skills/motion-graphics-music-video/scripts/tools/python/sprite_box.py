@@ -4,7 +4,7 @@
 usage: sprite_box.py SOURCE green|paper
   green: the character is everything that isn't chroma green; paper: everything far from the paper colour (sampled on the top/bottom rows).
   Videos are sampled every 6th frame and the boxes are unioned (plus a 24px margin), so the box holds the character through its motion.
-  H3's extra marks (speed lines, impact ticks) widen the union; the cut-out keeps only the part connected to the seed anyway.
+  Extra marks in supplied art (speed lines, impact ticks) widen the union; the cut-out keeps only the part connected to the seed anyway.
 prints JSON (parsed by Media::Python#call): frames sampled, the character's extent [x0, y0, x1, y1], and `box` [x, y, w, h] / `seed` [x, y]
 in source pixels, ready for 04_clips.yml.
 """

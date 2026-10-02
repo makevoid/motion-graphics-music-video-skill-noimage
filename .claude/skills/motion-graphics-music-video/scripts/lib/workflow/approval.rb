@@ -9,7 +9,7 @@ module Workflow
     end
     def path(relative) = File.join(@root, relative)
     def fingerprint
-      raise "Write docs/PLAN.md with character prompts, scene prompts and costs first" unless File.file?(path("docs/PLAN.md"))
+      raise "Write docs/PLAN.md with the creative direction and storyboard first" unless File.file?(path("docs/PLAN.md"))
       Digest::SHA256.file(path("docs/PLAN.md")).hexdigest
     end
     def record!(note)
@@ -20,7 +20,7 @@ module Workflow
       data
     end
     def check!
-      raise "Plan approval missing. Present docs/PLAN.md and obtain the user's approval before paid work." unless File.file?(path("config/approval.json"))
+      raise "Plan approval missing. Present docs/PLAN.md and obtain the user's approval before the full build." unless File.file?(path("config/approval.json"))
       data = JSON.parse(File.read(path("config/approval.json"), encoding: "UTF-8"))
       raise "Plan changed since approval; obtain approval for the revised plan." unless data["plan_sha256"] == fingerprint
       true

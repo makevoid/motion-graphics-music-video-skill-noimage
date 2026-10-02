@@ -7,7 +7,7 @@
 - Preview and master frame rates (default: 30 fps drafts, 60 fps 1080p master).
 - The requested mood and the chaotic/quiet balance.
 - What approval authorizes. The native workflow makes no paid calls.
-- If the optional character path is used: model call counts, generated seconds, pricing sources and the retry allowance.
+- Only for explicitly requested Fal audio: list the audio calls and retry allowance.
 
 ## Creative direction
 
@@ -70,19 +70,3 @@ Check:
 - the final frame count.
 
 Deliver the finished, plain and clean versions, a contact sheet and the docs, and note any known uncertainty.
-
-## Optional: characters (Fal path only)
-
-For each cast member:
-- a stable ID/version, role, silhouette, face, hair, clothing, palette and personality;
-- an expression/pose sheet and no-change anchors;
-- the character generation prompt, permitted edits and reference dependencies.
-
-Characters are generated alone on chroma green and composited by the Swift renderer. List every full-frame H3 shot with its reason; none is the expected answer.
-
-For each character shot:
-- keyframe prompts;
-- H3 prompt(s), 1080P, generated seconds, the exact stem interval and the placement interval;
-- mouth targets.
-
-Production waves: 2 pilot assets first, then 3–4, then 4–8, then 6–10 repeatedly ([production.md](../references/production.md)).

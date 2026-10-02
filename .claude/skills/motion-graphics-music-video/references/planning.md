@@ -7,8 +7,6 @@ Three starting points are supported:
    speed came from a reference.
 3. **A revision of an existing video.** Begin from its established storyboard, scene generator and latest delivered version. Preserve
    its meaningful sections and motif unless the user asked for a remix.
-   - On the optional character path, also start from its latest approved identity versions.
-   - Use `ref:import` to verify provenance and resolve version mismatches before prompting.
 
 ## Song-first planning
 
@@ -72,11 +70,6 @@ original plan in the user's chosen direction.
 - The native workflow makes no paid calls.
   - Approval covers the creative direction.
   - A rendered preview of the opening section makes the decision concrete.
-- When the optional character path is included:
-  - estimate calls by model and generated seconds;
-  - allow a bounded number of retries;
-  - quote current pricing sources. If a price cannot be established, say so and obtain a call-count budget. Do not invent a dollar total.
 - The chat summary should let the user understand the video without reading the whole plan.
 
-Approval covers execution within those creative (and, for characters, cost) bounds. Ask again for a changed creative direction, a model
-substitution, or spending beyond the allowance. Routine renders, fixes and iterations within the plan can proceed.
+Approval covers execution within those creative bounds. Ask again for a changed creative direction. Routine renders, fixes and iterations within the plan can proceed.

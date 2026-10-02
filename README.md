@@ -1,258 +1,105 @@
-# Motion graphics music video plugin
+# Motion graphics music video — native Mac edition
 
-<a href=".claude-plugin/icon.png"><img src=".claude-plugin/icon.png" width="128" height="128" alt="Orange glass chat bubble with a timeline play button and music note"></a>
+A Claude Code skill and plugin for creating music videos from a song and a creative prompt, built specifically for **macOS**. This repository is a fork of [makevoid/motion-graphics-music-video-skill](https://github.com/makevoid/motion-graphics-music-video-skill).
 
-A Claude Code plugin for creating high quality motion graphics videos from just a music track and a prompt - This skill is made to be used with  Opus 5.5
+Most visual and sound generation uses **Swift**: Core Graphics and Core Text draw scenes and typography, Metal renders shaders, particles and glow, AVFoundation exports video, and the Swift sound synthesizer and VFX renderer provide the finish. Ruby coordinates the toolkit and writes scene descriptions; local Python handles audio analysis, stem separation, cutouts and mixing.
 
----
+This is the **no-image-generation fork**. It builds motion graphics from code and can use supplied assets. GPT Image 2.5, Nano Banana and MiniMax H3 image/video generation have been removed. The default Swift workflow needs no Fal API key or credits. Fal audio support remains available for future use: Music3, Stable Audio SFX, Whisper transcription and Demucs stem separation, with the shared client and schema tools retained.
 
-It includes Image generation and editing with GPT 2.5 Sunburts xhigh for generating characters and potentially other graphics, MiniMax H3 to animate the characters and the graphics in a with a greenscreen background and other tools that are helpful to isolate audio for lip-sync and SFX creation - all of these are done via FAL.ai API via video/audio adapters - Animation and composition use native Swift with Core Graphics, Core Text, Metal and AVFoundation, local Python is used for  analysis/cutouts/audio mixing and Swift Core has powerful and fast Image VFX (video effects).
+[Skill instructions](.claude/skills/motion-graphics-music-video/SKILL.md) · [Native workflow](.claude/skills/motion-graphics-music-video/references/native-workflow.md) · [Task reference](.claude/skills/motion-graphics-music-video/references/tasks.md) · [Testing](.claude/skills/motion-graphics-music-video/references/testing.md)
 
-This is a very powerful toolkit that will generate videos like the ones below with a relatively low budget (~30$ of Fal AI credits and around 3M Tokens of Opus 5.5 for a ~3m long song / video).
+## Video made with this skill
 
-Follow the quick start below, then supply a song and creative prompt. The agent researches, writes the character/scene plan for approval, then generates in reviewed sub-agent waves of 2 → 3–4 → 4–8 → 6–10 repeatedly. This let you shorten the generation time substantially still giving enough context to Opus if the generations are going better or worse so that Opus can try to tweak / rework / fix the 
+This is the skill that generated [the music video posted by @makevoid on X](https://x.com/makevoid/status/2106038781610451310).
 
-The MP4 HD video file will be generated in the `ouput` directory at the end of the process as a single high quality video. You can open the directory at any time to see the process and intermediate artifacts. 
+## Requirements
 
-[Skill instructions](.claude/skills/motion-graphics-music-video/SKILL.md) · [Task reference](.claude/skills/motion-graphics-music-video/references/tasks.md) · [Testing](.claude/skills/motion-graphics-music-video/references/testing.md)
+- **macOS 14+** with Swift 5.9+ / Xcode command line tools. The rendering backend depends on Apple frameworks.
+- Ruby 3.2+ with Bundler; the older Ruby bundled with macOS is insufficient.
+- FFmpeg / ffprobe, ImageMagick and Python 3.
+- `uv` for local stem separation, music mapping and optional transcription. Local MLX transcription requires Apple Silicon.
+- Claude Code with web search for creative research.
 
-Native Swift drawing and animation is the rendering backend: retained paths/text, scene graphs, keyframes, Metal particles, Core Image composition and direct video export. See the [capability map and measurements](docs/processing-native-map.md) and [toolkit guide](.claude/skills/motion-graphics-music-video/scripts/tools/graphics/README.md).
+With Homebrew installed, install the command-line dependencies:
 
-## Videos created with this skill
+```sh
+brew install ruby ffmpeg imagemagick python uv
+xcode-select --install
+```
 
-Six examples made with this skill. Click a thumbnail to watch on YouTube.
-
-| The Math of You | You knew how to fork — take 2 | You knew how to fork |
-| :---: | :---: | :---: |
-| <a href="https://youtu.be/TKXSOnVtfWQ"><img src="docs/examples/the-math-of-you.jpg" width="240" height="135" alt="The Math of You — HN - Suno"></a> | <a href="https://youtu.be/b70F1bWZlwE"><img src="docs/examples/you-knew-how-to-fork-take-2.jpg" width="240" height="135" alt="You knew how to fork — take 2, made with the Claude skill"></a> | <a href="https://youtu.be/Nxhg23_fheY"><img src="docs/examples/you-knew-how-to-fork.jpg" width="240" height="135" alt="You knew how to fork — @joshcirre"></a> |
-| HN - Suno · 3:25 | @joshcirre · 1:26 | @joshcirre · 1:26 |
-| <br> | <br>  | <br>  |
-| **Upping my P(doom) — remix #2** | **Symphony** | **Parterre Girl** |
-| <a href="https://youtu.be/s8PmK6zD5RY"><img src="docs/examples/upping-my-p-doom-remix-2.jpg" width="240" height="135" alt="Upping my P(doom) — Video Remix #2 — Opus 5.5 (et al.)"></a> | <a href="https://youtu.be/UGX2KzetGZ0"><img src="docs/examples/symphony.jpg" width="240" height="135" alt="Symphony — Elrosea — Opus 5.5 Music Video Motion Graphics Claude Plugin — SunoAI"></a> | <a href="https://youtu.be/Zqd77QCaa58"><img src="docs/examples/parterre-girl.jpg" width="240" height="135" alt="Opus 5.5 Animated Video - Parterre Girl by Core Refusal - Suno"></a> |
-| Remix of donaldjewkes's video remix · 2:22 | Elrosea · Opus 5.5 · SunoAI | Core Refusal · Opus 5.5 · Suno |
-
-<br>
+Use the Homebrew Ruby in your shell's `PATH`. No Node.js or browser renderer is required.
 
 ## Quick start
 
-1. Install the plugin from your terminal:
+Install this fork from your terminal:
 
-   ```sh
-   claude plugin marketplace add makevoid/motion-graphics-music-video-skill
-   claude plugin install motion-graphics-music-video@makevoid-music-video --scope user
-   ```
+```sh
+claude plugin marketplace add makevoid/motion-graphics-music-video-skill-noimage
+claude plugin install motion-graphics-music-video@makevoid-music-video --scope user
+```
 
-2. Start `claude` in the terminal and set your Fal API key:
-
-   ```text
-   /plugin configure motion-graphics-music-video
-   ```
-
-   Enter your Fal AI key in the **Fal API key** field.
-
-3. Open Claude Desktop, select **Code**, and start a new code session with access to a folder.
-
-4. Run the skill, then supply your song and creative prompt:
-
-   ```text
-   /motion-graphics-music-video:motion-graphics-music-video
-   ```
-
-That's it. The plugin's `music-video` MCP server runs every Fal AI task with your key. Claude Code keeps the key in secure credential storage and passes it only to that server, so the Claude session never sees it.
-
-## Usage
-
-### Requirements
-
-Install the native rendering and media dependencies before generating a video. The graphics backend requires macOS 14+; there is no browser or Node.js dependency.
-
-- Python 3 (should be installed already)
-- Homebrew https://brew.sh/ - this is needed to install the other dependencies
-- Ruby 3.2+ with Bundler (Mac OS comes with it with 2.6 - this should work as well but the agent will spend some time setting the project up, I recommend you try to install ruby via homebrew)
-- FFmpeg (from homebrew)
-- ImageMagick (also from brew)
-- Swift graphics/VFX and the full test suite require macOS 14+ with Swift 5.9+ / Xcode command line tools
-
-### Running the skill
-
-In a Claude **Code** session with folder access, or a `claude` terminal session in the folder where you want to work, invoke:
+Start a Claude Code session with access to a working folder, then invoke:
 
 ```text
 /motion-graphics-music-video:motion-graphics-music-video
 ```
 
-Note: Use Claude Code from the terminal, the desktop version from my tests doesn't work this well.
-
-Supply a song attachment or local path and a creative prompt. The skill will ask you with a message similar to this one:
-
-## Prerequisites
-
-Register a Fal.ai account and retrieve your API Key
-
-https://fal.ai/docs/documentation/setting-up/authentication
-
-
-## Example run
-
-Invoking the skill in Claude Code produces output like this:
+Supply a song attachment or local path and a creative prompt. Optional inputs include lyrics, reference images or videos, an excerpt range, aspect ratio and intended audience. For example:
 
 ```text
-─────────────────────────────────────────────────────────────────────────────────
-❯ /motion-graphics-music-video:motion-graphics-music-video
-─────────────────────────────────────────────────────────────────────────────────
-
-⏺ Skill(motion-graphics-music-video:motion-graphics-music-video)
-Successfully loaded skill
-
-The motion-graphics-music-video skill is loaded. To start, I need two things:
-
-1. The song: an attachment or a local path (mp3/wav/m4a).
-2. A creative prompt: the concept, vibe, story or characters you want.
-
-These are optional, and I'll use defaults for anything you leave out:
-- Reference videos or images.
-- Characters you want to keep. For example, the dreadlocks singer (char-singer-dreads) from the main repo.
-- Aspect ratio. The default is 16:9 at 24fps, delivered at 1080p.
-- Who the video is for.
-- Budget. This sets the limit on paid fal calls and retries.
-
-Once I have the song and prompt, I'll set up a separate project for it and analyze the song's beats and energy. I'll also research visual ideas online and write docs/PLAN.md with the character prompts, scene prompts and a cost estimate. I won't make any paid generation calls until you approve that plan.
+Use /absolute/path/song.mp3 to make a kinetic typography music video about space.
+Use diagrams, playful visual callbacks and beat-synced camera moves.
+Make a 16:9 video and show me an opening preview before the full render.
 ```
 
-Just providing the song + telling to do his best also works. Also providing the lyrics in songs where the lyrics are not perfectly audible improve generation.
+The skill creates a separate project, installs its local dependencies, maps beats and musical sections, researches visual ideas, and writes `docs/PLAN.md`. It draws scenes with the native Swift renderer, previews the affected ranges, then finishes the approved video with procedural sound effects and Swift VFX. Defaults are 1080p, 30 fps previews and a 60 fps master.
 
----
+Videos and review artifacts are written to the project's `output/` directory. Scene generators, plans and timing maps stay in that project for revisions. Rendering can use several gigabytes of scratch space; keep the source song and project files when cleaning up intermediate renders.
 
-The skill creates a separate video project, runs `setup` to install Ruby gems and a local Python environment, then builds the Swift renderers there, then runs `doctor` to check dependencies. It asks you to approve its plan and budget before new generation trying also to do an estimate of the cost on Fal.ai. Dependencies and production files stay in the video project, outside the plugin installation.
+## Optional Fal audio
 
-Plugin sessions run it through the MCP server to include the configured key; a direct Bash invocation cannot see the plugin's sensitive option. 
+Fal is retained for audio tasks that may be useful in later projects: MiniMax Music3 music generation, Stable Audio SFX, Whisper transcription and Demucs stem separation. The skill uses these only when explicitly requested; local analysis and Swift sound synthesis remain the defaults.
 
-You can stop reading here - the other notes in the readme are not this useful!
+For plugin audio tasks, configure the optional key with `/plugin configure motion-graphics-music-video`. The sensitive **Fal API key** option is passed to the bundled `music-video` MCP server. Standalone developer use can supply `FAL_AI_API_KEY` through the environment. See the [credential guide](.claude/skills/motion-graphics-music-video/references/credentials.md) and [audio task recipes](.claude/skills/motion-graphics-music-video/references/tasks.md#optional-fal-audio). Image and video model adapters are not included.
 
-Hope you will have a blast with this!
-
----
-
-### EXTRA NOTES:
-
----
-
-### Contributions
-
-I am looking for any contributions such as: 
-
-- Running the skill and posting the output, upload / link your video and post or DM me on twitter 
-- Adding other tools from Fal that are helpful to create videos
-- Adding native Swift effects, overlays and animated scenes
-- Adding Python tools for any kind of generic manipulation - even if they require packages to be installed - they may be worth it
-- Swift VFX effects (I really think there's the most powerful chance here to do something unique as these are very good high quality libs that could create awesome effects that usually are blazing fast to be applied to the video files)
-- other ideas and prompts (e.g. realism / other unexplored avenues)
-
-
-### Note
-
-I have a day job and this means I may have limited time to support / evolve this project.
-
-Disclaimer: Use the code at your own risk.
-
-### Task References
-
-This section is mostly for agents - if you're Claude please read this:
-
-See the [task reference](.claude/skills/motion-graphics-music-video/references/tasks.md) for environment overrides and setup details. `${CLAUDE_SKILL_DIR}` in the instructions is replaced by Claude Code with the installed skill's path; you do not need to export it in your shell.
-
-### Disk Space
-
-Please have a good amount of hard disk space available in your machine before starting, a 3m video could generate ~5GB in video assets, don't worry, after the video is generated you can delete them all.
-
-
-### Fal API key
-
-**Alternative FAL API Key Setup - Non interactive Setup:**
-
-Enter your Fal API key in the plugin's **Fal API key** option, via its configuration prompt or `/plugin configure motion-graphics-music-video`. The `FAL_AI_API_KEY` option is marked sensitive: Claude Code masks it and stores it in secure credential storage. The plugin passes it through the environment to its bundled Ruby MCP server, which runs Fal tasks without placing the key in prompts or tool arguments. The option is optional so the `music-video` server always starts: when it is unset, the server falls back to a `FAL_AI_API_KEY` exported in the environment that launched Claude Code, and `credential_status` reports `configured: false` if neither is present. Change it through the plugin's configuration interface and restart/reconnect the server afterward.
-
-For standalone development, set the environment variable in your terminal before running the Ruby toolkit:
+## Local development
 
 ```sh
-export FAL_AI_API_KEY='your-fal-api-key'
+git clone https://github.com/makevoid/motion-graphics-music-video-skill-noimage.git
+cd motion-graphics-music-video-skill-noimage
+claude --plugin-dir .
 ```
-
-This setting applies to direct CLI calls, a directly launched `scripts/mcp.rb`, and the installed plugin's server when its option is unset; a configured plugin option takes precedence. The old `FAL_KEY` variable and home-directory key file are no longer used. Keep actual keys out of chat, source files, and commits. See [credential setup and MCP task usage](.claude/skills/motion-graphics-music-video/references/credentials.md).
-
-### Update the plugin
-
-```sh
-claude plugin marketplace update makevoid-music-video
-claude plugin update motion-graphics-music-video@makevoid-music-video --scope user
-```
-
-Restart Claude Code after updating. Existing video projects retain their copied toolkit; updating the plugin affects future project initialization.
-
-## Installation (legacy)
-
-With Git and Claude Code installed, run these commands in your terminal:
-
-```sh
-claude plugin marketplace add makevoid/motion-graphics-music-video-skill
-claude plugin install motion-graphics-music-video@makevoid-music-video --scope user
-```
-
-The user-scoped installation makes the plugin available across your projects. Claude Code downloads it from GitHub; you do not need a separate clone or symlink. See [Claude Code plugin installation](https://code.claude.com/docs/en/plugins/install) for other installation scopes.
-
-To run it from the terminal instead of Claude Desktop, start a new Claude Code session in the directory where you want to work:
-
-```sh
-claude
-```
-
-Then invoke `/motion-graphics-music-video:motion-graphics-music-video` as described in [Usage](#usage).
-
-## Local development and manual installation
-
-To work on the plugin locally, clone the repository and validate both manifests:
-
-```sh
-git clone https://github.com/makevoid/motion-graphics-music-video-skill.git
-cd motion-graphics-music-video-skill
-claude plugin validate .claude-plugin/plugin.json --strict
-claude plugin validate .claude-plugin/marketplace.json --strict
-```
-
-Load your local plugin for a session with `claude --plugin-dir /absolute/path/to/motion-graphics-music-video-skill` and use the same namespaced command shown above.
-
-The repository also supports standalone skill use: start `claude` in the clone and invoke `/motion-graphics-music-video`. For standalone use across projects on macOS or Linux, run this from the clone's root:
-
-```sh
-mkdir -p ~/.claude/skills
-ln -s "$PWD/.claude/skills/motion-graphics-music-video" \
-  ~/.claude/skills/motion-graphics-music-video
-```
-
-Keep the clone in place because the link points to it. If the destination exists, inspect it before replacing it. Keep the whole skill folder, including its scripts, references, and assets. Update a manual clone with `git pull --ff-only`.
-
-## Toolkit commands
 
 From the repository root:
 
 ```sh
 ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb --help
+ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb -T
 ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb setup
 ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb test
 ```
 
-`rake test` is also a thin delegate to the Ruby entry point. All normal tests are local and make no paid Fal calls. Live tests require explicit paid-test opt-in; see the testing guide. The local full suite requires macOS for Swift graphics/VFX, FFmpeg, ImageMagick, Python and Ruby. No original project outputs, songs, secrets or generated characters are bundled. Fonts are selected from the host system and copied into each video workspace immediately before rendering; no font files are bundled.
+`rake test` delegates to the same Ruby entry point. `PROFILE=core` checks the CLI, project initialization and workflow contracts; `PROFILE=media` and `PROFILE=swift` exercise local media and native rendering. The complete suite requires the macOS dependencies above. Fal audio behavior is tested with mocked responses; routine tests make no paid calls.
+
+For video production, initialize a project outside the plugin installation and use `--project`:
+
+```sh
+ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb init --project /absolute/video-project --song /absolute/song.mp3 --prompt-file /absolute/brief.md
+ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb --project /absolute/video-project setup
+```
+
+The project contains its own copy of the runtime. Existing projects retain the version they were initialized with; installing this fork does not remove image/video adapters from older projects. Start a fresh project to use this version.
+
+Fonts are selected from the Mac's installed fonts and copied into each video workspace before rendering. No font files or source songs are bundled.
+
+## Contributions
+
+Contributions are welcome: Swift graphics and shader effects, procedural sound effects, local audio-analysis tools, scene recipes, and examples made with this fork.
+
+## Network use
+
+Default rendering, audio processing, synthesis and exports run locally. Setup downloads dependencies from package registries; local transcription and stem separation may download model weights on first use. Web research uses the agent's configured search tools, and plugin installation and updates use GitHub. Explicitly requested Fal audio tasks send their prompts and selected audio to Fal and may incur charges; its stored media URLs may be accessible to anyone with the link. The default native workflow does not upload media to Fal. There is no maintainer telemetry or automatic social publishing. Normal Claude conversation and tool-result handling still applies.
 
 ## License
 
-The plugin's original code and documentation are [MIT licensed](LICENSE). The [icon generation record](docs/icon-generation.md) documents the Nano Banana 2 high-thinking image and its resized PNG and SVG versions.
-
-## External services and data sharing
-
-The local MCP server and standalone CLI send data to external services:
-
-- **Fal API and storage** (`queue.fal.run`, `rest.alpha.fal.ai`, provider-returned URLs including `*.fal.media`): API authentication, prompts, lyrics, settings, and selected audio/images/video for generation, transcription, and stem separation. Media URLs may be accessible to anyone with the link; remote assets are not automatically deleted. See [Fal's privacy policy](https://fal.ai/legal/privacy-policy).
-- **Fal schemas** (`fal.ai/api/openapi/queue/openapi.json`): model identifiers for schema lookup.
-- **Web research**: creative-brief search queries and reference URLs go to Claude's configured search provider and visited sites.
-- **Dependencies and updates**: setup contacts RubyGems and PyPI (or configured mirrors) with package information; plugin installation and updates contact GitHub.
-- **Local processing**: analysis, rendering, editing, and exports run locally. No maintainer telemetry or automatic social publishing is included. Normal Claude conversation and tool-result handling still applies.
+The code and documentation are [MIT licensed](LICENSE), retaining the original project's attribution. The bundled plugin icon is inherited from the original project; its [provenance](docs/icon-generation.md) is retained.

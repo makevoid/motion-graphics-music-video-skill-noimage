@@ -89,28 +89,18 @@ module Pipeline
       private
 
       def sketch = project.prompt_path("05_overlay")
-      # The video to draw on: a held keyframe (plate:), the multi-shot plate, or the single-shot video.
-      def plate
-        return project.fetch!(project.step?(Shots) ? :shots : :video, :path) unless still_plate?
-        project.keyframe(project.generation[:plate])["path"]
-      end
-
-      def still_plate? = !!project.generation[:plate]
+      # Optional supplied image/video; a scene without a plate draws its own background.
+      def plate = project.generation[:plate]&.then { |path| File.expand_path(path, ROOT) }
+      def still_plate? = plate.nil? || %w[.png .jpg .jpeg .webp .tif .tiff].include?(File.extname(plate).downcase)
       def reference = project.generation[:reference]&.then { |f| File.join(ROOT, f) }
       def data_path(name) = project.path("05_overlay", "#{name}.json")
       def tracks = project.generation.fetch(:track, {})
 
       def data_files
         files = { words: data_path(:words), **tracks.keys.to_h { |name| [name, data_path(name)] } }
-        if project.step?(Clips)
-          clips = project.fetch!(:clips, :items).transform_values { |item| JSON.parse(File.read(item["path"])).slice("dir", "frames", "w", "h", "audio_at", "box", "src") }
-          File.write(data_path(:clips), JSON.pretty_generate(clips))
-          files[:clips] = data_path(:clips)
-        end
-        return files unless project.step?(Shots)
-        shots = Shots.new(project: project).specs.map { |name, s| { name: name, start_frame: s["start_frame"], frames: s["frames"] } }
-        File.write(data_path(:shots), JSON.pretty_generate(shots))
-        files.merge(shots: data_path(:shots))
+        clips = project.generation[:clips]
+        files[:clips] = File.expand_path(clips, ROOT) if clips
+        files
       end
 
       def track!
@@ -127,7 +117,7 @@ module Pipeline
       end
 
       def plate_format
-        return { width: 1920, height: 1080, fps: Clips::FPS, frames: (project.duration * Clips::FPS).round } if still_plate?
+        return { width: 1920, height: 1080, fps: 24, frames: (project.duration * 24).round } if still_plate?
         @plate_format ||= ffmpeg.summary(plate).then do |s|
           { width: s.dig(:video, :w), height: s.dig(:video, :h), fps: s.dig(:video, :fps),
             frames: s.dig(:video, :frames) || (s[:duration] * s.dig(:video, :fps)).round }

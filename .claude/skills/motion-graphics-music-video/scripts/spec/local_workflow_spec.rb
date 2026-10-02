@@ -5,14 +5,12 @@ RSpec.describe "Local soundtrack and prepared overlay", :media do
     song = tone(duration: 3)
     run = "e2e-local-#{Process.pid}-#{object_id}"
     project = Pipeline::Project.new(run)
-    stub_const("Pipeline::GENERATIONS", { run => { steps: [Pipeline::Steps::Music, Pipeline::Steps::Keyframes, Pipeline::Steps::Overlay],
-                                                  **Pipeline.section(24, 4), music_from: song, upload_music: false, plate: "paper", track: {pin: [100,200,16,16,1]} } })
+    stub_const("Pipeline::GENERATIONS", { run => { steps: [Pipeline::Steps::Music, Pipeline::Steps::Overlay],
+                                                  **Pipeline.section(24, 4), music_from: song, upload_music: false, plate: character, track: {pin: [100,200,16,16,1]} } })
     expect(Fal::Client).not_to receive(:new)
     Pipeline::Steps::Music.new(project: project).run!
     expect(project[:music]["url"]).to be_nil
     expect(ff.duration(project[:music]["path"])).to be_within(0.002).of(4 / 24.0)
-    plate = character
-    project.record(:keyframes, items: { paper: { path: plate } })
     dir = File.join(RT, "prompts", run)
     FileUtils.mkdir_p(dir)
     json(File.join(dir, "05_overlay.json"), background: "#202060", nodes: [{type: "rect", x: 20, y: 20, width: 120, height: 120}])

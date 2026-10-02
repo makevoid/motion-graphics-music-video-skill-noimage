@@ -3,7 +3,7 @@ require_relative "base"
 module Fal
   module Models
     # https://fal.ai/models/fal-ai/demucs: music source separation into stems (vocals, drums, bass, other, …). The vocal stem drives
-    # H3's lip-sync without the band, so the mouth rests in the singer's pauses (mv2-s7, Mom's lines).
+    # audio analysis and local character timing without instrumental bleed.
     class Demucs < Base
       ENDPOINT = "fal-ai/demucs".freeze
       DEFAULTS = { model: "htdemucs_ft", output_format: "wav" }.freeze

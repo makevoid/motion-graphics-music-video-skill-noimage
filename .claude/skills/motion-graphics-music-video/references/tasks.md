@@ -18,8 +18,9 @@ motion-graphics-music-video/
       tasks.rb                   thin rake declarations
       toolkit/                   task application services and test runner
       workflow/                  plan approval and wave allocation
-      pipeline/                  project, steps, manifests, generation/editing
-      fal/                       Ruby HTTP queue/storage/model adapters
+      runtime.rb                 load media services and audio/composition steps
+      pipeline/                  audio runs, local composition and manifests
+      fal/                       audio adapters, queue/storage client and schemas
       media/                     Ruby wrappers that shell out
     tools/
       python/                    analysis, cutouts, tracking and audio mixing
@@ -32,7 +33,6 @@ motion-graphics-music-video/
 
 All examples below are executed from the skill directory. Replace `/absolute/project` with the real initialized project path. `ruby scripts/mv.rb --project /absolute/project 'TASK[...]'` and, inside the project, `bundle exec rake 'TASK[...]'` are equivalent. CLI flags precede/follow the task; task arguments use Rake brackets. Quote bracket expressions in zsh. For file names containing commas, rename/copy the input in Ruby before using Rake's comma-separated arguments.
 
-For plugin use, adapt Fal-facing recipes to the `music-video` server's `run_task` tool and poll `task_status`, as described in [credentials.md](credentials.md). The MCP process receives the sensitive plugin key; ordinary Bash calls do not. Local recipes keep using the resolved absolute Ruby entry path from `SKILL.md`.
 
 ## Setup and inspection
 
@@ -41,15 +41,13 @@ ruby scripts/mv.rb --help
 ruby scripts/mv.rb -T
 ruby scripts/mv.rb --project /absolute/project setup
 ruby scripts/mv.rb --project /absolute/project doctor
-ruby scripts/mv.rb --project /absolute/project openapi:fetch
-ruby scripts/mv.rb --project /absolute/project openapi:summary
 ```
 
-`setup` calls Bundler and Python venv/pip through Ruby, then builds both Swift packages. Install system Ruby, FFmpeg/ffprobe, ImageMagick and Swift/Xcode command line tools on macOS 14+ beforehand. `MV_PYTHON` overrides the local `.venv/bin/python3`; `MEDIA_FONT` overrides the detected font path. Configure the plugin's sensitive `FAL_AI_API_KEY` option, or set `FAL_AI_API_KEY` in the environment for direct developer CLI calls; never put the key in prompts/config/commits. `doctor` prints JSON booleans; `STRICT=1` makes missing dependencies fail. Tests require the full selected profile's tools and do not silently skip missing dependencies.
+`setup` calls Bundler and Python venv/pip through Ruby, then builds both Swift packages. Install system Ruby, FFmpeg/ffprobe, ImageMagick and Swift/Xcode command line tools on macOS 14+ beforehand. `MV_PYTHON` overrides the local `.venv/bin/python3`; `MEDIA_FONT` overrides the detected font path. `doctor` prints JSON booleans; `STRICT=1` makes missing dependencies fail. Tests require the full selected profile's tools and do not silently skip missing dependencies.
 
 `fonts:list` scans installed macOS TTF/OTF files. Just before rendering, `fonts:copy[config/fonts.json]` copies a JSON mapping of project filenames to absolute source paths into the video's `tools/graphics/fonts/`. Run with `--project /absolute/video-workspace`; see [Project fonts](animation-audio-vfx.md#project-fonts). Setup does not fetch fonts.
 
-## Native scenes, previews and finals (default workflow)
+## Native scenes, previews and finals
 
 The step-by-step process is in [native-workflow.md](native-workflow.md); the recipes are in [scene-cookbook.md](scene-cookbook.md).
 
@@ -72,120 +70,49 @@ cd /absolute/project && ruby scenes/finish_cues.rb output/video_clean.mp4
 - The scene generator and `finish_cues.rb` are plain Ruby scripts inside the project. They only write JSON/YAML; rendering still goes
   through `mv.rb`.
 
-## New run configuration (optional Fal character path)
-
-When regenerating a video with approved character sheets and their original Fal manifests, register those identities locally without uploading again:
+## Creative approval and progress
 
 ```sh
-ruby scripts/mv.rb --project /absolute/project 'ref:import[char-dev-v1,/absolute/dev.png,/absolute/original-run/manifest.json]'
+NOTE='User approved the linked creative plan' ruby scripts/mv.rb --project /absolute/project plan:approve
+AGENT=main EVENT=preview MESSAGE='Opening rendered for review' ruby scripts/mv.rb --project /absolute/project work:log
+ruby scripts/mv.rb --project /absolute/project work:watch
 ```
 
-The service verifies that the supplied image exactly matches the source manifest's local image, copies it into the new project's run and retains its existing HTTPS URL, model and request ID as provenance. Repeated identical imports are safe; a different identity must use a new versioned RUN. Both source files must exist for verification. If a hosted URL has expired, use the normal authorized upload flow and record the replacement; do not assume that an old URL still works. This imports an identity, not a finished scene. The new project can then use `import: { ref_base: "char-dev-v1" }` and generate fresh keyframes.
+`work:next` and `work:accept` can track dependency-ready local jobs when the project uses `config/production.json`; they do not submit media to a service. Use `graphics:preview` and `graphics:render` directly for scenes. The default rendering and finishing workflow runs locally.
 
-Invoke each import (and each differently parameterized call to the same Rake task) in a separate Ruby CLI process. Rake runs a task name once per process, even if it appears again with different bracket arguments.
+## Optional Fal audio
 
-`config/generations.rb` evaluates inside `Pipeline` and returns a Hash. It contains configuration, never rake bodies or shell commands:
+Use these only for audio work the user explicitly requests. Read [credentials.md](credentials.md) first. Keep the normal supplied-song, local-analysis and Swift-SFX path otherwise.
+
+```sh
+ruby scripts/mv.rb --project /absolute/project openapi:fetch
+ruby scripts/mv.rb --project /absolute/project openapi:summary
+ruby scripts/mv.rb --project /absolute/project 'audio:transcribe[audio/song.wav,audio/words.json]'
+ruby scripts/mv.rb --project /absolute/project 'media:stems[audio/song.wav,audio/stems,vocals]'
+```
+
+In plugin sessions, run the paid tasks via the `music-video` MCP server. Schema inspection stays in the Ruby CLI. The schemas cover only Music3, Stable Audio SFX, Whisper and Demucs.
+
+For Music3, `config/generations.rb` returns a Hash evaluated inside `Pipeline`:
 
 ```ruby
 {
-  "char-singer-v1" => { steps: [Steps::RefBase], image_model: Fal::Models::GptImage25 },
-  "s01" => {
-    steps: [Steps::RefBase, Steps::Music, Steps::Keyframes, Steps::Clips, Steps::Overlay],
-    import: { ref_base: "char-singer-v1" },
-    **section(0, 240), plate: "background"
-  },
-  "s02" => {
-    steps: [Steps::RefBase, Steps::Music, Steps::Keyframes, Steps::Clips, Steps::Overlay],
-    import: { ref_base: "char-singer-v1" },
-    **section(240, 192), plate: "s01/background"
-  }
+  "audio-demo" => { steps: [Steps::Music], duration: 10, upload_music: false, lyrics: [] }
 }
 ```
 
-For a new identity version edited from a prior character, add a run with `steps: [Steps::RefBase], edit_from: "char-singer-v1"` and write its edit instructions in `01_ref_base.txt`. `edit_from: "s01/approved-edit"` can instead promote an existing edited keyframe. The RefBase service selects the Sunburst edit endpoint, records a new identity and leaves the source untouched. Point dependent runs at the new ID after review.
+Write `prompts/audio-demo/03_music_prompt.txt` and `03_music_lyrics.txt`, include the requested call and retry allowance in `docs/PLAN.md`, and record the user's approval with `plan:approve`. Then run `RUN=audio-demo gen:music`. Output and request receipts are retained under `output/`. `review:music` checks local metrics; when `upload_music: true`, it also uses paid Whisper. `music_from:` and `music_offset:` reuse a supplied local soundtrack instead of generating one.
 
-`section(at, frames)` uses full `audio/song.wav`, offset `at/24.0`, integer frame length and an empty expected-lyrics list. Set `lyrics:` to selected recognizable words if desired. Sprite scenes are the default: `Clips, Overlay` with a still keyframe `plate:`, as in the example above. The full-frame paths are exceptions that the plan must justify (see "Self-contained characters" in [prompts.md](prompts.md)): a single H3 plate uses `Video` and a 5–15 second integer duration; multi-shot plates use `Keyframes, Shots, Overlay` with no `plate:`. `track:` optionally maps names to `[x,y,size,search,from_frame]` for tracked graphics. `reference:` is an optional local reference-video path.
+`sfx:gen` also retains Stable Audio SFX support when a sound has `prompt:` rather than `synth:` or `tone:`. Use prompt-based SFX only when requested and approved; native synthesis needs no Fal key.
 
-Set `upload_music: false` when a section only needs its local soundtrack for compositing (for example a nonsinging H3 shot with `audio: false` plus existing timed captions). `gen:music` then cuts/fits the local WAV without constructing a Fal client. Use `anim:prepare` for existing cues. `review:music` runs local metrics and marks transcription skipped; expected lyrics cannot be verified without a transcript. A `Video`, an audio-driven `Shots` item or paid `gen:overlay` that reads `music.url` requires the default upload behavior. `Clips` with a separate vocal stem uploads just its actual needed stem interval.
+The optional run pipeline supports only `Steps::Music` and `Steps::Overlay`. For an existing local scene, set `plate:` to a supplied image/video path or omit it for a scene that draws its own background. Optional `clips:` points to local clip metadata JSON. Write `prompts/<run>/05_overlay.json`, run `anim:prepare[full-song-words.json]`, then `anim:preview[0,24]` / `anim:overlay` for local composition. `gen:overlay` instead uses paid Whisper to prepare captions. `pipeline:all` processes the configured audio/composition steps and may call paid audio services; it is not the default video command.
 
-Prompt files per run:
-
-| File | Purpose |
-|---|---|
-| `01_ref_base.txt` (or `.json`) | Character prompt; JSON is sent as prompt text, not model options |
-| `02_keyframes.yml` | Named image edit prompts, `base`, `refs` |
-| `04_video.txt` | Single-shot H3 prompt (the Video step reads this stem) |
-| `04_shots.yml` | Ordered shots, images, frames, optional audio/retime |
-| `04_clips.yml` | H3/still/source sprite specifications and chroma/crop |
-| `05_overlay.json` | Native scene, rendered through Ruby |
-
-Read each step's `prompt` call if adding a new type. The imported `Music3` wrapper is optional for explicit song-generation requests; the normal skill uses the user's supplied song.
-
-Example `02_keyframes.yml`:
-
-```yaml
-background:
-  prompt: "Background plate matching the approved scene, visual style, lighting and colour treatment; no people or text."
-singer:
-  prompt: "SAME approved singer, full body, flat chroma green #00B140, limbs inside frame, no text."
-reaction:
-  base: singer
-  prompt: "Same singer and framing; change only the expression to surprised."
-duet:
-  refs: [char-guest-v1]
-  prompt: "Singer from image 1 and guest from image 2, separated silhouettes."
-```
-
-`base: false` omits the current ref_base; combine with `refs`. `base: other-run/keyframe` reuses an edited frame. An earlier same-run keyframe must appear before any dependent edit.
-
-Example `04_clips.yml`:
-
-```yaml
-- name: sing
-  image: singer
-  seconds: 5
-  audio: audio/stems/vocals.wav
-  audio_at: 0
-  gate: -36
-  key: green
-  prompt: "Same singer and approved visual style. Articulate the approved opening lyric; eyebrow raise on its joke. Locked camera, flat green, no text."
-- name: surprise
-  still: reaction
-  key: green
-```
-
-`audio_at` is section-local, not the whole-song time. Omit `gate` if it damages consonants. `box: [x,y,w,h]`, `seed: [x,y]`, `frames`, `start`, `scale` are cutout options. Use the approved full prompt directive, style and performance details in real files; these abbreviated examples only show the schema.
-
-## Production and review commands (optional Fal character path)
-
-```sh
-NOTE='User approved the linked plan and its generation allowance' ruby scripts/mv.rb --project /absolute/project plan:approve
-ruby scripts/mv.rb --project /absolute/project work:next
-LOG_DIR=/absolute/evaluation/logs LIMIT=3 ruby scripts/mv.rb work:watch
-JOB=singer-v1 EVIDENCE=docs/reviews/singer-v1.md ruby scripts/mv.rb --project /absolute/project work:accept
-RUN=char-singer-v1 ruby scripts/mv.rb --project /absolute/project gen:ref_base
-RUN=char-singer-v1 ruby scripts/mv.rb --project /absolute/project review:ref_base
-RUN=s01 ruby scripts/mv.rb --project /absolute/project pipeline:all
-RUN=s01 ONLY=sing FORCE=1 ruby scripts/mv.rb --project /absolute/project gen:clips
-RUN=s01 RECUT=1 ONLY=sing FORCE=1 ruby scripts/mv.rb --project /absolute/project gen:clips
-RUN=s01 ruby scripts/mv.rb --project /absolute/project 'anim:prepare[audio/words.json]'
-RUN=s01 ruby scripts/mv.rb --project /absolute/project 'anim:preview[0,24,96,239]'
-RUN=s01 ruby scripts/mv.rb --project /absolute/project anim:overlay
-ruby scripts/mv.rb --project /absolute/project 'media:preview[output/clean.mp4,s01,s02]'
-```
-
-`gen:ref_base`, `gen:keyframes`, `gen:video`, `gen:shots`, H3 `gen:clips`, generated music, `gen:overlay`, `review:music`, stems and SFX may call paid Fal endpoints. `gen:music` for an imported song is local processing plus CDN upload; `gen:overlay` uses paid Whisper unless re-rendering saved cues through `anim:overlay`. Reviews other than music are local. `pipeline:all` includes paid review calls; allocate them in the plan.
-
-For existing reliable word timings, use `anim:prepare[full-song-words.json]` after the plate prerequisites exist, then `anim:preview`/`anim:overlay`. It accepts Whisper `chunks` or an array of `{w,s,e}` / `{word,start,end}`, selects this section and subtracts its song offset. With no argument it writes an empty cue list for sketches with explicitly authored timing. It also prepares configured tracks locally. `anim:overlay` records a complete manifest even on the first local render, so `review:overlay` works without a paid `gen:overlay` call.
-
-`FORCE=1` changes cached work; `ONLY` confines ItemsStep work to named assets. A selected partial item set will not build the complete step's board until all items exist. `NEW_REQUEST=1` allows a new identical paid request; normal retries reuse saved receipts. `history[step]`, `adopt[step,request_id]`, `pick[step,index]`, `import[step,source_run]` support recovery and reuse. ItemsStep recovery uses per-item stored request IDs and reruns; adopt/pick are for single-output steps.
+`media:preview[out.mp4,s01,s02]` joins contiguous run sections with one continuous song. `history`, `adopt`, `pick` and `import` retain audio request recovery/reuse. Retrying an identical Fal request resumes its saved receipt; use `NEW_REQUEST=1` only for an authorized fresh request. The pipeline has no image/video generation steps.
 
 ## Analysis, finishing and utility tasks
 
 ```sh
 ruby scripts/mv.rb --project /absolute/project 'audio:analyze[audio/source.mp3,audio]'
-ruby scripts/mv.rb --project /absolute/project 'audio:transcribe[audio/song.wav,audio/words.json]'
-ruby scripts/mv.rb --project /absolute/project 'media:stems[audio/song.wav,audio/stems,vocals]'
 ruby scripts/mv.rb --project /absolute/project 'media:frames[reference.mp4,output/reference_frames,12,480]'
 ruby scripts/mv.rb --project /absolute/project 'media:cuts[reference.mp4,output/cuts.json]'
 ruby scripts/mv.rb --project /absolute/project 'media:montage[output/review/strip.jpg,8,240,tmp/f/f_097.png,tmp/f/f_098.png]'
@@ -197,7 +124,7 @@ ruby scripts/mv.rb --project /absolute/project 'audio:hits[audio/stems/drums.wav
 ruby scripts/mv.rb --project /absolute/project 'audio:vocals[audio/stems/vocals.wav,audio/map/vocals.json,audio/map/beatmap.json]'
 ruby scripts/mv.rb --project /absolute/project 'audio:sections[audio/song.wav,audio/map/sections.json,audio/map/beatmap.json,audio/map/hits.json,audio/map/vocals.json]'
 ruby scripts/mv.rb --project /absolute/project 'audio:excerpt[audio/song.wav,audio/excerpt.wav,23,114.5,1.7]'
-ruby scripts/mv.rb --project /absolute/project 'media:mouth[output/s01/04_clips/sing,audio/stems/vocals.wav,0,120,60,40,20]'
+ruby scripts/mv.rb --project /absolute/project 'media:mouth[assets/singer-frames,audio/stems/vocals.wav,0,120,60,40,20]'
 ruby scripts/mv.rb --project /absolute/project 'anim:render[tools/graphics/examples/futuristic.json,tmp/smoke,48,1920,1080]'
 SFX=finish-sfx ruby scripts/mv.rb --project /absolute/project sfx:gen
 SFX=finish-sfx ruby scripts/mv.rb --project /absolute/project sfx:mix
@@ -218,7 +145,7 @@ ruby scripts/mv.rb --project /absolute/project 'media:faststart[output/finished.
 
 It refuses to overwrite `out`, and prints the result with `mbps`, `fits_free` (≤ 140 s, ≤ 512 MB) and `fits_premium` (≤ 4 h, ≤ 16 GB on web/iOS; Android uploads stop at 10 min). A 1080p60 native render re-encodes transparently (deadstar: PSNR 50 dB, SSIM 0.997, ~3 min for 2 min on 8 cores). `media:faststart` is the lossless alternative when the master is already in spec and only needs its index moved to the front.
 
-`media:montage` tiles frames into a labelled contact strip (columns, tile width) for frame-exact sync review. `audio:transcribe_local` (mlx-whisper; `MV_WHISPER_MODEL`, `MV_WHISPER_LANG`) and `media:stems_local` (Demucs `htdemucs` on MPS; `MV_DEMUCS_MODEL`; writes vocals, no_vocals, drums, bass and other in one pass) are free local alternatives run through `uv`; their timestamps refer to the whole song. Sung or heavily processed vocals can still hallucinate words; verify by listening.
+`media:montage` tiles frames into a labelled contact strip (columns, tile width) for frame-exact sync review. `audio:transcribe_local` (mlx-whisper; `MV_WHISPER_MODEL`, `MV_WHISPER_LANG`) and `media:stems_local` (Demucs `htdemucs` on MPS; `MV_DEMUCS_MODEL`; writes vocals, no_vocals, drums, bass and other in one pass) run locally through `uv`; their timestamps refer to the whole song. Sung or heavily processed vocals can still hallucinate words; verify by listening.
 
 `audio:excerpt[audio,out.wav,from,seconds,fade_seconds]` cuts the render soundtrack: `seconds` long from `from`, silence-padded if the song is shorter, with an optional fade-out over the last `fade_seconds`; 44.1 kHz stereo. Pass it as `AUDIO=` to `graphics:render` so the video and soundtrack share frame 0.
 
@@ -229,7 +156,7 @@ It refuses to overwrite `out`, and prints the result with `mbps`, `fits_free` (�
 - `vocals.json`: `lines` (lyric lines), `phrases` (words/notes) and `onsets` from a vocal stem, each with bar/step.
 - `sections.json`: per-bar sub/low/mid/high/rms dB and hit counts, grouped into `drop`/`build`/`filtered`/`breakdown`/`groove` (+`vox`) sections with an `energy` 0–1. Labels are heuristics from band presence; confirm by listening.
 
-`media:probe`, `media:sheet`, `media:frame`, `media:cut`, `media:cutout`, `media:sprite_box`, `media:style`, `media:concat`, `media:mux`, `media:upload` and `media:youtube` are listed by `-T` with their arguments. Export names denote encoding presets; they do not publish to platforms. For unlisted operations, add an OOP service under `lib/` and a thin registry delegate. Keep backend code under `tools/` and tests in `spec/`.
+`media:probe`, `media:sheet`, `media:frame`, `media:cut`, `media:cutout`, `media:sprite_box`, `media:style`, `media:concat`, `media:mux` and `media:youtube` are listed by `-T` with their arguments. Export names denote encoding presets; they do not publish to platforms. For unlisted operations, add an OOP service under `lib/` and a thin registry delegate. Keep backend code under `tools/` and tests in `spec/`.
 
 For detached lettering or debris in an RGBA sprite sequence, run `ruby scripts/mv.rb --project /absolute/project 'media:keep_component[output/raw-sprite,output/clean-sprite,320,400]'`. The seed is an integer pixel coordinate inside the intended subject in **every** input frame. The task preserves its four-connected nonzero-alpha component exactly and clears other alpha; it never expands or bridges components. Output must be a different, new or empty directory. Out-of-bounds or transparent seeds fail the whole sequence without publishing partial output. Touching text remains part of the subject and needs a separate mask; inspect the cleaned motion before use.
 

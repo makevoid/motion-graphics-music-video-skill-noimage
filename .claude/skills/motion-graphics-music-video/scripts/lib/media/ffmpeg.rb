@@ -115,7 +115,7 @@ module Media
     end
 
     # Replace video's audio with `audio` (video stream copied). shortest: false keeps every video frame when the audio is
-    # already cut to the video's length (media:preview): -shortest stops at an AAC packet boundary and dropped the last
+    # already cut to the video's length (media:mux): -shortest stops at an AAC packet boundary and dropped the last
     # 4 frames of the 3373-frame full-song preview.
     def mux(video, audio, out, shortest: true)
       run("ffmpeg", "-y", "-v", "error", "-i", video, "-i", audio,

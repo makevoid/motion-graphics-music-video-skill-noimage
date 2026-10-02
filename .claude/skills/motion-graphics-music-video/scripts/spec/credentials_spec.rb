@@ -76,6 +76,9 @@ RSpec.describe "Configured Fal credentials and MCP delivery", :core do
     expect { runner.start(project: project, task: "doctor", options: {"FAL_AI_API_KEY" => "override"}) }.to raise_error(ArgumentError)
     expect { runner.start(project: project, task: "doctor; echo unexpected") }.to raise_error(ArgumentError)
     expect { runner.start(project: project, task: "setup") }.to raise_error(ArgumentError)
+    %w[gen:ref_base gen:ref_torn gen:keyframes gen:video gen:shots gen:clips].each do |task|
+      expect { runner.start(project: project, task: task) }.to raise_error(ArgumentError, /Unsupported task/)
+    end
     expect { runner.start(project: fixtures, task: "doctor") }.to raise_error(ArgumentError)
     expect { runner.start(project: project, task: "doctor", options: {"RUN" => 2}) }.to raise_error(ArgumentError)
   end
@@ -83,7 +86,7 @@ RSpec.describe "Configured Fal credentials and MCP delivery", :core do
   it "checks plan approval before passing the credential to an upload or generation task" do
     runner = task_runner
     project = prepared_project
-    task = "media:upload[art with spaces.png]"
+    task = "media:upload[audio with spaces.wav]"
     expect { runner.start(project: project, task: task) }.to raise_error(/approval missing/i)
     FileUtils.mkdir_p(File.join(project, "docs"))
     File.write(File.join(project, "docs/PLAN.md"), "Mocked approval gate test")
@@ -97,7 +100,7 @@ RSpec.describe "Configured Fal credentials and MCP delivery", :core do
   it "reports missing configuration without exposing a placeholder as a real key" do
     runner = task_runner(api_key: "${user_config.FAL_AI_API_KEY}")
     expect(runner.configured?).to be(false)
-    expect { runner.start(project: prepared_project, task: "gen:ref_base") }.to raise_error(/Configure the plugin/)
+    expect { runner.start(project: prepared_project, task: "gen:music") }.to raise_error(/Configure the plugin/)
     result = wait_for_job(runner, runner.start(project: prepared_project, task: "doctor")[:job_id])
     expect(JSON.parse(result[:output])["key_digest"]).to eq(Digest::SHA256.hexdigest(""))
   end
@@ -117,7 +120,7 @@ RSpec.describe "Configured Fal credentials and MCP delivery", :core do
       tasks = Toolkit::CredentialTasks.new(entry: #{file("server/fixture.rb").inspect}, api_key: "fixture-only")
       Toolkit::McpServer.new(tasks: tasks).run
     RUBY
-    task = "media:upload[art — café.png]"
+    task = "media:upload[audio — café.wav]"
     Open3.popen3({"LC_ALL" => "C", "LANG" => "C"}, RbConfig.ruby, "-EUS-ASCII", server) do |input, output, errors, waiter|
       rpc = lambda do |name, arguments|
         input.puts(JSON.generate(jsonrpc: "2.0", id: 1, method: "tools/call", params: {name: name, arguments: arguments}))

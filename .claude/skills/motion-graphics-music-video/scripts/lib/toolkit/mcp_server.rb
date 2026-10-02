@@ -10,9 +10,8 @@ module Toolkit
   # editing, and recording the user's approval stay in the ordinary Ruby CLI.
   class CredentialTasks
     TASKS = %w[doctor audio:transcribe media:stems media:upload sfx:gen
-      pipeline:all adopt gen:ref_base gen:ref_torn gen:keyframes gen:video
-      gen:shots gen:clips gen:music gen:overlay review:music].freeze
-    OPTIONS = %w[RUN ONLY FORCE RECUT NEW_REQUEST VIDEO_RES SFX VFX REFRESH_UPLOAD].freeze
+      pipeline:all adopt gen:music gen:overlay review:music].freeze
+    OPTIONS = %w[RUN ONLY FORCE NEW_REQUEST SFX REFRESH_UPLOAD].freeze
     OUTPUT_LIMIT = 20_000
     MAX_RUNNING = 10
     PLUGIN_KEY = "FAL_AI_API_KEY_PLUGIN"
@@ -40,7 +39,7 @@ module Toolkit
       runtime = File.realpath(File.dirname(@entry))
       raise ArgumentError, "Use a video project outside the installed toolkit" if project == runtime || project.start_with?(runtime + "/")
       match = task.is_a?(String) && /\A([a-z_:]+)(?:\[[^\]\r\n\x00]*\])?\z/.match(task)
-      raise ArgumentError, "Unsupported task; use a documented Fal task or doctor" unless match && TASKS.include?(match[1])
+      raise ArgumentError, "Unsupported task; use a documented Fal audio task or doctor" unless match && TASKS.include?(match[1])
       raise ArgumentError, "options must contain only supported string task options" unless options.is_a?(Hash) && options.all? { |key, value| OPTIONS.include?(key) && value.is_a?(String) && !value.include?("\0") }
       Workflow::Approval.new(root: project).check! unless task == "doctor"
       @lock.synchronize do
@@ -122,10 +121,10 @@ module Toolkit
     TOOLS = [
       { name: "credential_status", description: "Check whether the Fal API key is configured. Never returns its value.",
         inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, openWorldHint: false } },
-      { name: "run_task", description: "Start a Fal-facing Ruby toolkit task in an initialized, trusted video project. May upload media and incur Fal charges. Recorded production approval covers necessary uploads and generation within budget across RUNs; do not ask again per scene. Project Ruby configuration is executable code. Returns immediately; poll task_status. Local setup and plan approval use the Ruby CLI.",
+      { name: "run_task", description: "Start an explicitly requested Fal audio task in an initialized, trusted video project. May upload media and incur Fal charges. Recorded production approval covers necessary uploads and generation within budget across RUNs. Native Swift is the default; do not propose remote image/video generation. Project Ruby configuration is executable code. Returns immediately; poll task_status. Local setup and plan approval use the Ruby CLI.",
         inputSchema: { type: "object", properties: {
           project: { type: "string", description: "Absolute path of the initialized video project" },
-          task: { type: "string", description: "One Rake task, e.g. gen:ref_base or audio:transcribe[audio/song.wav,audio/words.json]" },
+          task: { type: "string", description: "One Rake task, e.g. gen:music or audio:transcribe[audio/song.wav,audio/words.json]" },
           options: { type: "object", properties: CredentialTasks::OPTIONS.to_h { |name| [name, { type: "string" }] }, additionalProperties: false }
         }, required: %w[project task], additionalProperties: false }, annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true } },
       { name: "task_status", description: "Read a job's state, exit code and recent redacted output. Poll until completed or failed before accepting its asset.",
@@ -154,7 +153,7 @@ module Toolkit
         when "initialize"
           requested = params["protocolVersion"]
           { protocolVersion: PROTOCOLS.include?(requested) ? requested : PROTOCOLS.first,
-            capabilities: { tools: {} }, serverInfo: { name: "music-video", version: "0.2.1" } }
+            capabilities: { tools: {} }, serverInfo: { name: "music-video", version: "0.2.0" } }
         when "ping" then {}
         when "tools/list" then { tools: TOOLS }
         when "tools/call" then call_tool(params)

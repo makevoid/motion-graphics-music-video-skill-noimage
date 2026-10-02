@@ -1,6 +1,6 @@
 # Native workflow: a music video drawn entirely in Swift
 
-This is the default production path. It makes a complete video from the song alone: no image or video models, no
+This is the production path for this macOS skill. It makes a complete video from the song alone: no image or video models, no
 paid calls and no API key. Every picture is vector or Metal graphics drawn by the bundled Swift renderer (`tools/graphics`).
 Ruby services run every stage, and the Swift synth and VFX finish it. The steps below are the process that made the
 *deadstar* video (117.5 s of beat-synced neon line art, 60 fps 1080p), written generically for a new song.

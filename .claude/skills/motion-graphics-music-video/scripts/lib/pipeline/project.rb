@@ -6,7 +6,7 @@ module Pipeline
   ROOT = File.expand_path("../..", __dir__)
 
   # One generation run: output/<run>/ with a manifest.json holding each step's
-  # request_id, input, remote url and local file so steps can chain via rake.
+  # audio request_id, input, remote url and local file so steps can chain via rake.
   class Project
     attr_reader :name, :dir
 
@@ -51,13 +51,6 @@ module Pipeline
       value
     end
 
-    # A Keyframes item of this run, or of another run as "<run>/<keyframe>" (to reuse its framing, its green-screen pose or its paper).
-    def keyframe(name)
-      run, kf = name.include?("/") ? name.split("/", 2) : [nil, name]
-      source = run ? Project.new(run) : self
-      source.fetch!(:keyframes, :items).fetch(kf) { raise "no keyframe '#{kf}' in #{source.name} — add it to 02_keyframes.yml and run rake gen:keyframes" }
-    end
-
     def generation
       GENERATIONS.fetch(name) { raise "unknown RUN=#{name} (#{GENERATIONS.keys.join(", ")}), add it to Pipeline::GENERATIONS" }
     end
@@ -71,7 +64,7 @@ module Pipeline
     # Run this step's output is copied from (GENERATIONS import:), or nil.
     def import_source(step) = generation.fetch(:import, {})[step.to_sym]
 
-    # prompts/<run>/<stem>.* — e.g. prompt("01_ref_base") reads 01_ref_base.txt or 01_ref_base.json.
+    # prompts/<run>/<stem>.* — audio prompts and local scene JSON.
     def prompt(stem) = File.read(prompt_path(stem))
 
     def prompt_path(stem)
