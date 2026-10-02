@@ -41,7 +41,9 @@ public enum Designs {
         let easing: Easing = kind == "slam" ? .inCubic : .outBack
         let scale = try Track([Keyframe(start,from),Keyframe(start+duration,1,easing:easing)])
         node.start = start; node.tracks["scaleX"] = scale; node.tracks["scaleY"] = scale
-        node.tracks["opacity"] = try Track([Keyframe(start,0),Keyframe(start+duration/3,1)])
+        // Hits (slap/slam) are fully visible on their first frame so they land on the beat; pop fades in.
+        if kind == "pop" { node.tracks["opacity"] = try Track([Keyframe(start,0),Keyframe(start+duration/3,1)]) }
+        else { node.tracks["opacity"] = nil }
         if kind == "slap" { node.tracks["rotation"] = try Track([Keyframe(start,node.rotation+0.08),Keyframe(start+duration,node.rotation,easing:.outCubic)]) }
     }
 }

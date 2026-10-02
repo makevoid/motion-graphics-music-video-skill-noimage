@@ -89,6 +89,42 @@ final class GraphicsTests: XCTestCase {
             try Data(json.utf8).write(to:url); XCTAssertThrowsError(try SceneDocument(url:url,width:32,height:32))
         }
     }
+    func testHoldEasingStepsAtNextKey() throws {
+        let t = try Track([Keyframe(0,0),Keyframe(1,10,easing:.hold),Keyframe(2,20,easing:.hold)])
+        XCTAssertEqual(t.value(at:0.99),0); XCTAssertEqual(t.value(at:1),10); XCTAssertEqual(t.value(at:1.5),10); XCTAssertEqual(t.value(at:2),20)
+    }
+    func testTrimDrawsOnlyThePartialOutlineAndBoilIsDeterministic() throws {
+        let line = ShapeNode(.polygon([CGPoint(x:0,y:8),CGPoint(x:64,y:8)],closed:false),style:Style(fill:nil,stroke:.white,lineWidth:4))
+        line.tracks["trimEnd"] = try Track([Keyframe(0,0),Keyframe(1,1)])
+        let scene = Scene(); try scene.root.add(line)
+        let c = try Canvas(width:64,height:16); try scene.draw(on:c,at:FrameTime(frame:12,fps:24))
+        XCTAssertEqual(pixel(c,16,8)[3],255); XCTAssertEqual(pixel(c,48,8)[3],0)
+        let lines = Path.rect(CGRect(x:0,y:0,width:10,height:10)).flattened()
+        XCTAssertEqual(lines.count,1); XCTAssertTrue(lines[0].closed); XCTAssertEqual(lines[0].length,40,accuracy:1e-6)
+        let a = Path.trimmed(lines,from:0,to:1,boil:2,step:3,seed:5).cgPath, b = Path.trimmed(lines,from:0,to:1,boil:2,step:3,seed:5).cgPath
+        XCTAssertEqual(a,b); XCTAssertNotEqual(a,Path.trimmed(lines,from:0,to:1,boil:2,step:4,seed:5).cgPath)
+        XCTAssertTrue(Path.trimmed(lines,from:0.6,to:0.4).cgPath.isEmpty)
+    }
+    func testDocumentTextAlignmentWarpGridAndShapeTracks() throws {
+        let dir = try temp(), url = dir.appendingPathComponent("scene.json")
+        let json = """
+        {"nodes":[{"type":"text","text":"WWW","size":20,"x":64,"y":30,"align":"center","tracking":2},
+                  {"type":"warpgrid","width":128,"height":40,"spacing":16,"strength":0.6,"falloff":30,"color":"#ffffff","tracks":{"strength":[[0,0],[1,1]]}},
+                  {"type":"line","points":[[0,0],[10,0]],"boil":1,"tracks":{"trimEnd":[[0,0],[1,1]],"strokeWidth":[[0,1],[1,3]]}}]}
+        """
+        try Data(json.utf8).write(to:url)
+        let doc = try SceneDocument(url:url,width:128,height:40)
+        let text = doc.scene.root.children[0] as! TextNode; XCTAssertEqual(text.alignment,.center)
+        let c = try Canvas(width:128,height:40); try doc.scene.draw(on:c,at:FrameTime(frame:12,fps:24))
+        let left = (0..<40).reduce(0) { s,y in s+(0..<20).reduce(0) { $0+Int(pixel(c,$1,y)[3]) } }
+        XCTAssertGreaterThan(left,0)
+        for bad in ["{\"nodes\":[{\"type\":\"text\",\"text\":\"A\",\"align\":\"middle\"}]}",
+                    "{\"nodes\":[{\"type\":\"text\",\"text\":\"A\",\"tracks\":{\"trimEnd\":[[0,0],[1,1]]}}]}",
+                    "{\"nodes\":[{\"type\":\"rect\",\"boil\":-1}]}",
+                    "{\"nodes\":[{\"type\":\"text\",\"text\":\"A\",\"font\":\"NoSuchFont-Bold\"}]}"] {
+            try Data(bad.utf8).write(to:url); XCTAssertThrowsError(try SceneDocument(url:url,width:32,height:32))
+        }
+    }
     func testCoreImageMaskAndComposition() throws {
         let c = try Compositor(width:16,height:16), canvas = try Canvas(width:16,height:16)
         let bounds = c.extent, red = CIImage(color:CIColor(red:1,green:0,blue:0)).cropped(to:bounds)

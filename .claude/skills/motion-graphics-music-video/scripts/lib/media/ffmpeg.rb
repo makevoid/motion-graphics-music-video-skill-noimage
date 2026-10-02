@@ -90,6 +90,7 @@ module Media
     def extract_audio(media, out, from: 0, seconds: nil)
       window = (from.positive? ? ["-ss", from.to_s] : [])
       length = seconds ? ["-t", seconds.to_s] : []
+      FileUtils.mkdir_p(File.dirname(out))
       run("ffmpeg", "-y", "-v", "error", *window, "-i", media, *length, "-vn", "-map", "0:a:0", "-ac", "2", "-ar", "44100", out)
       out
     end

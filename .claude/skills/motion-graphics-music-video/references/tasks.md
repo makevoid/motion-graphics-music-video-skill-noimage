@@ -163,6 +163,9 @@ ruby scripts/mv.rb --project /absolute/project 'audio:transcribe[audio/song.wav,
 ruby scripts/mv.rb --project /absolute/project 'media:stems[audio/song.wav,audio/stems,vocals]'
 ruby scripts/mv.rb --project /absolute/project 'media:frames[reference.mp4,output/reference_frames,12,480]'
 ruby scripts/mv.rb --project /absolute/project 'media:cuts[reference.mp4,output/cuts.json]'
+ruby scripts/mv.rb --project /absolute/project 'media:montage[output/review/strip.jpg,8,240,tmp/f/f_097.png,tmp/f/f_098.png]'
+ruby scripts/mv.rb --project /absolute/project 'audio:transcribe_local[audio/source.mp3,audio/words_local.json,23,12]'
+ruby scripts/mv.rb --project /absolute/project 'media:stems_local[audio/source.mp3,audio/stems,0,60]'
 ruby scripts/mv.rb --project /absolute/project 'media:mouth[output/s01/04_clips/sing,audio/stems/vocals.wav,0,120,60,40,20]'
 ruby scripts/mv.rb --project /absolute/project 'anim:render[tools/graphics/examples/futuristic.json,tmp/smoke,48,1920,1080]'
 SFX=finish-sfx ruby scripts/mv.rb --project /absolute/project sfx:gen
@@ -173,6 +176,8 @@ VFX=finish-vfx ruby scripts/mv.rb --project /absolute/project 'vfx:clip[96,144]'
 VFX=finish-vfx ruby scripts/mv.rb --project /absolute/project vfx:render
 ruby scripts/mv.rb --project /absolute/project 'media:twitter[output/finished.mp4,output/delivery-1080.mp4]'
 ```
+
+`media:montage` tiles frames into a labelled contact strip (columns, tile width) for frame-exact sync review. `audio:transcribe_local` (mlx-whisper; `MV_WHISPER_MODEL`, `MV_WHISPER_LANG`) and `media:stems_local` (Demucs `htdemucs` on MPS; `MV_DEMUCS_MODEL`) are free local alternatives run through `uv`; their timestamps refer to the whole song. Sung or heavily processed vocals can still hallucinate words; verify by listening.
 
 `media:probe`, `media:sheet`, `media:frame`, `media:cut`, `media:cutout`, `media:sprite_box`, `media:style`, `media:concat`, `media:mux`, `media:upload` and `media:youtube` are listed by `-T` with their arguments. Export names denote encoding presets; they do not publish to platforms. For unlisted operations, add an OOP service under `lib/` and a thin registry delegate. Keep backend code under `tools/` and tests in `spec/`.
 

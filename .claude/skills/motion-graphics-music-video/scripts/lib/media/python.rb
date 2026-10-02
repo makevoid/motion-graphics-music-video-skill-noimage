@@ -33,6 +33,21 @@ module Media
       call("cutout.py", *args.map(&:to_s))
     end
 
+    # Local word timestamps through mlx-whisper in an ephemeral uv environment (Apple Silicon; no Fal call).
+    # Returns Whisper-style { "text", "chunks" => [{ "text", "timestamp" => [s, e] }] } in whole-song seconds.
+    def transcribe_local(audio, from: 0.0, seconds: 0.0, model: ENV["MV_WHISPER_MODEL"] || "mlx-community/whisper-large-v3-turbo", language: ENV["MV_WHISPER_LANG"].to_s)
+      raise CommandError, "uv is required for local transcription (https://docs.astral.sh/uv/)" unless Shell.available?("uv")
+      JSON.parse(run("uv", "run", "--quiet", "--no-project", "--python", "3.12", "--with", "mlx-whisper",
+                     "python", File.join(SCRIPTS, "transcribe_local.py"), audio, from.to_s, seconds.to_s, model, language, quiet: true).lines.last)
+    end
+
+    # Local Demucs vocals/no_vocals WAVs (full-song aligned) through an ephemeral uv environment; no Fal call.
+    def stems_local(audio, out, from: 0.0, seconds: 0.0, model: ENV["MV_DEMUCS_MODEL"] || "htdemucs")
+      raise CommandError, "uv is required for local stems (https://docs.astral.sh/uv/)" unless Shell.available?("uv")
+      JSON.parse(run("uv", "run", "--quiet", "--no-project", "--python", "3.12", "--with", "demucs", "--with", "soundfile",
+                     "python", File.join(SCRIPTS, "stems_local.py"), audio, out, from.to_s, seconds.to_s, model, quiet: true).lines.last)
+    end
+
     # RMS loudness + vocal-band energy per window, for a mono wav.
     def audio_energy(wav, window: 0.5)
       call("audio_energy.py", wav, window.to_s)

@@ -47,7 +47,7 @@ Root keys:
 
 Common node fields: `type`, `name`, `x`, `y`, `rotation`, `scale` or `scaleX`/`scaleY`, `anchor: [x,y]`, `opacity`, `start`, `end`, `blend`, `clip: [x,y,w,h]`, `tracks`, `children`. Visibility is `[start,end)`. Group opacity is isolated: overlapping children fade together. Blend modes: normal, screen, add, multiply, overlay, difference, exclusion, lighten, darken, erase.
 
-Tracks have the form `"x": [[0, 100], [2, 800, "outCubic"]]`. Times must strictly increase. The destination key selects the segment's easing. Supported properties: x, y, rotation, scaleX, scaleY, opacity. Easing: linear, inCubic, outCubic, inOutCubic, outExpo, outBack, outElastic, smooth. Values clamp to endpoint keys. Swift `Track` additionally supports repeat periods. `entrance: "pop"|"slap"|"slam"` installs scale/opacity tracks starting at the node's `start`; it replaces tracks for those properties.
+Tracks have the form `"x": [[0, 100], [2, 800, "outCubic"]]`. Times must strictly increase. The destination key selects the segment's easing. Supported properties: x, y, rotation, scaleX, scaleY, opacity. Easing: linear, inCubic, outCubic, inOutCubic, outExpo, outBack, outElastic, smooth, hold (keeps the previous value until the key's time: hard cuts/strobes). Values clamp to endpoint keys. Swift `Track` additionally supports repeat periods. `entrance: "pop"|"slap"|"slam"` installs scale tracks starting at the node's `start` (pop also fades opacity in; slap/slam are fully opaque on their first frame so hits land on the beat); it replaces tracks for those properties. Shapes additionally animate `trimStart`, `trimEnd` (0...1 of the outline length, stroked as a partial outline: draw-on lines), `strokeWidth` and `dashPhase`; `warpgrid` animates `strength`, `twist` and `strokeWidth`.
 
 | Node | Additional fields |
 | --- | --- |
@@ -61,16 +61,17 @@ Tracks have the form `"x": [[0, 100], [2, 800, "outCubic"]]`. Times must strictl
 | arc | radius, arcStart, arcEnd, arcMode (open, chord, pie); nonuniform node scale makes elliptical arcs |
 | star | radius, inner, rays |
 | paper | width, height, seed, roughness |
-| text | text, font (PostScript name), size, fill, outline, outlineWidth, reveal (track; spatial wipe) |
+| text | text, font (PostScript name; unknown names fail instead of falling back), size, fill (null for outline-only), outline, outlineWidth, reveal (track; spatial wipe), align (left/center/right about x), tracking (px) |
 | image | path, width, height |
 | sprite | path (directory of 0000.png...), frames, fps, width, height, loop, audioAt; alternatively clipName/clipData from external clip metadata |
 | trace | points, color, strokeWidth, progress (track) |
 | grid | width, height, spacing, color |
+| warpgrid | width, height, spacing, color, strokeWidth, center `[x,y]`, strength (0...1 pull at the core), falloff (Gaussian px), twist (radians at the core), resolution (px per line segment): gravity-well grid |
 | reticle, flare | radius, color |
 | waveform | samples or samplesData (external numeric array), width, height, color, progress |
 | karaoke | words or wordsData (external `[{w,s,e},...]`), font, size |
 
-All shape nodes accept `fill`/`stroke` (hex, or null to disable), `strokeWidth`, `dash`, `evenOdd`, and `gradient`. A linear gradient specifies `colors`, `from`, `to`; a radial gradient specifies `colors`, `center`, `radius`. Paths and gradients are constructed once. Unknown keys, node types, effects, and animated properties fail with an error. Fields belonging to other valid node types are not a strict per-type schema; consult this table.
+All shape nodes accept `fill`/`stroke` (hex, or null to disable), `strokeWidth`, `dash`, `evenOdd`, `gradient`, `trimStart`/`trimEnd`, and hand-drawn line boil: `boil` (px vertex jitter), `boilRate` (redraws per second, default 12), `seed`. A linear gradient specifies `colors`, `from`, `to`; a radial gradient specifies `colors`, `center`, `radius`. Paths and gradients are constructed once. Unknown keys, node types, effects, and animated properties fail with an error. Fields belonging to other valid node types are not a strict per-type schema; consult this table.
 
 Asset paths are relative to the scene JSON. External `--data name=file.json` paths are relative to the process working directory. Pipeline clip metadata `dir` is also relative to that working directory. Sprite `audio_at` is honored; use x/y/width/height for placement (automatic `src`/`box` placement is available via Swift arithmetic, not a JSON option).
 

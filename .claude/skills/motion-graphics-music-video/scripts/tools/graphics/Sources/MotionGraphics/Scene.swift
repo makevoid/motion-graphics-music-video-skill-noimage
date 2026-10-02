@@ -45,24 +45,42 @@ open class Node {
     open func draw(on canvas: Canvas, at time: FrameTime) throws {}
 }
 public final class Group: Node {}
+/// Animatable tracks beyond the transform: trimStart, trimEnd (0...1 of the outline length; a partial outline
+/// is stroked only), strokeWidth, dashPhase. `boil` (px) redraws the vertices with seeded jitter `boilRate` times
+/// per second, like hand-drawn animation on twos/threes.
 public final class ShapeNode: Node {
     public let path: Path
     public var style: Style, gradient: Gradient?
+    public var trimStart = 0.0, trimEnd = 1.0, boil = 0.0, boilRate = 12.0, boilSeed: UInt64 = 1
+    private lazy var polylines: [Polyline] = path.flattened()
     public init(_ path: Path, style: Style = Style(), name: String = "") { self.path = path; self.style = style; super.init(name:name) }
     public override func draw(on canvas: Canvas, at time: FrameTime) {
+        let t = time.seconds
         canvas.style = style
-        if let gradient { canvas.gradient(gradient,in:path); canvas.style.fill = nil }
-        canvas.draw(path)
+        if let w = tracks["strokeWidth"] { canvas.style.lineWidth = max(0,w.value(at:t)) }
+        if let d = tracks["dashPhase"] { canvas.style.dashPhase = d.value(at:t) }
+        let a = tracks["trimStart"]?.value(at:t) ?? trimStart, b = tracks["trimEnd"]?.value(at:t) ?? trimEnd
+        var shape = path
+        if a > 0 || b < 1 || boil > 0 {
+            guard b > a else { return }
+            let partial = a > 0 || b < 1
+            shape = Path.trimmed(polylines,from:a,to:b,boil:boil,step:Int(floor(t*max(0.001,boilRate))),seed:boilSeed,wholeClosed:!partial)
+            if partial { canvas.style.fill = nil }
+        }
+        if let gradient, canvas.style.fill != nil { canvas.gradient(gradient,in:shape); canvas.style.fill = nil }
+        canvas.draw(shape)
     }
 }
 public final class TextNode: Node {
+    public enum Alignment: String { case left, center, right }
     public let layout: TextLayout
     public var color: Color = .white, outlineColor: Color = .black, outlineWidth = 0.0
-    public var reveal: Track?
-    public init(_ text: String, font: String = "HelveticaNeue", size: Double = 48, name: String = "") {
-        layout = TextLayout(text,font:font,size:size); super.init(name:name)
+    public var reveal: Track?, alignment = Alignment.left
+    public init(_ text: String, font: String = "HelveticaNeue", size: Double = 48, tracking: Double = 0, name: String = "") {
+        layout = TextLayout(text,font:font,size:size,tracking:tracking); super.init(name:name)
     }
     public override func draw(on canvas: Canvas, at time: FrameTime) {
+        switch alignment { case .left: break; case .center: canvas.translate(-layout.width/2,0); case .right: canvas.translate(-layout.width,0) }
         if let reveal { canvas.context.clip(to:CGRect(x:0,y:-layout.ascent,width:layout.width*min(1,max(0,reveal.value(at:time.seconds))),height:layout.ascent+layout.descent)) }
         if outlineWidth > 0 { canvas.style = Style(fill:nil,stroke:outlineColor,lineWidth:outlineWidth); canvas.draw(layout.outline) }
         layout.draw(on:canvas,at:.zero,color:color)

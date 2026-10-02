@@ -139,6 +139,11 @@ public final class TextLayout {
             }
         }
     }
+    /// Core Text substitutes a fallback face for unknown names; this detects that by PostScript/full/family name.
+    public static func isAvailable(_ font: String) -> Bool {
+        let f = CTFontCreateWithName(font as CFString,12,nil), wanted = font.lowercased()
+        return [CTFontCopyPostScriptName(f),CTFontCopyFullName(f),CTFontCopyFamilyName(f)].contains { ($0 as String).lowercased() == wanted }
+    }
     public static func registerFont(at url: URL) throws {
         var error: Unmanaged<CFError>?
         guard CTFontManagerRegisterFontsForURL(url as CFURL,.process,&error) else {

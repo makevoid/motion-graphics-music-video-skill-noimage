@@ -54,7 +54,8 @@ public final class SceneDocument {
             if row.count == 3 { guard let name = row[2] as? String, let e = Easing(rawValue:name) else { throw GraphicsError.invalid("Unknown easing") }; ease = e } else { ease = .linear }
             return Keyframe(t,v,easing:ease)
         }
-        return try Track(keys)
+        do { return try Track(keys) }
+        catch { throw GraphicsError.invalid("\(error) (keyframe times: \(keys.map(\.time)))") }
     }
     private func points(_ o: Object) throws -> [CGPoint] {
         try o.array("points").map { raw in
@@ -62,11 +63,17 @@ public final class SceneDocument {
             return CGPoint(x:p[0],y:p[1])
         }
     }
+    private func font(_ o: Object) throws -> String {
+        let name = try o.string("font","HelveticaNeue")
+        guard TextLayout.isAvailable(name) else { throw GraphicsError.invalid("Font not installed or registered: \(name) (use its PostScript name and list the file in fonts)") }
+        return name
+    }
     private func node(_ o: Object) throws -> Node {
         try o.keys(["type","name","x","y","rotation","scale","scaleX","scaleY","opacity","start","end","anchor","blend","children","tracks","clip",
                     "width","height","radius","inner","rays","points","closed","commands","fill","stroke","strokeWidth","dash","evenOdd","gradient",
                     "text","font","size","outline","outlineWidth","reveal","path","frames","fps","loop","audioAt","clipData","clipName",
-                    "progress","spacing","seed","roughness","samples","samplesData","words","wordsData","entrance","color","arcStart","arcEnd","arcMode"])
+                    "progress","spacing","seed","roughness","samples","samplesData","words","wordsData","entrance","color","arcStart","arcEnd","arcMode",
+                    "trimStart","trimEnd","boil","boilRate","align","tracking","strength","falloff","twist","center","resolution"])
         let type = try o.string("type"), name = try o.string("name","")
         let w = try o.number("width",100), h = try o.number("height",100), radius = try o.number("radius",50)
         let color = try o.color("color",Color(0,1,1)) ?? .clear
@@ -112,6 +119,9 @@ public final class SceneDocument {
             var style = Style(fill:try o.color("fill",type == "line" ? nil : .white),stroke:try o.color("stroke",type == "line" ? .white : nil),lineWidth:try o.number("strokeWidth",1))
             style.evenOdd = try o.bool("evenOdd",false); style.dash = try o.numbers("dash").map { CGFloat($0) }
             let shape = ShapeNode(path,style:style,name:name)
+            shape.trimStart = try o.number("trimStart",0); shape.trimEnd = try o.number("trimEnd",1)
+            shape.boil = try o.number("boil",0); shape.boilRate = try o.number("boilRate",12); shape.boilSeed = UInt64(max(0,try o.integer("seed",1)))
+            guard shape.boil >= 0, shape.boilRate > 0 else { throw GraphicsError.invalid("boil must be >= 0 and boilRate > 0") }
             if o.raw["gradient"] != nil {
                 let g = try o.object("gradient"); try g.keys(["colors","from","to","center","radius"])
                 let colors = try g.array("colors").map { value -> Color in guard let s = value as? String else { throw GraphicsError.invalid("Gradient colors must be hex") }; return try Color(hex:s) }
@@ -120,7 +130,8 @@ public final class SceneDocument {
             }
             n = shape
         case "text":
-            let text = TextNode(try o.string("text"),font:try o.string("font","HelveticaNeue"),size:try o.number("size",48),name:name)
+            let text = TextNode(try o.string("text"),font:try font(o),size:try o.number("size",48),tracking:try o.number("tracking",0),name:name)
+            guard let align = TextNode.Alignment(rawValue:try o.string("align","left")) else { throw GraphicsError.invalid("align must be left, center or right") }; text.alignment = align
             text.color = try o.color("fill",.white) ?? .clear; text.outlineColor = try o.color("outline",.black) ?? .clear; text.outlineWidth = try o.number("outlineWidth",0)
             if let reveal = o.raw["reveal"] { text.reveal = try track(reveal) }; n = text
         case "image": n = try ImageNode(ImageAsset(url:resolve(o.string("path"))),rect:CGRect(x:0,y:0,width:w,height:h),name:name)
@@ -140,6 +151,11 @@ public final class SceneDocument {
             let trace = TraceNode(try points(o),name:name); trace.color = color; trace.lineWidth = try o.number("strokeWidth",3)
             if let progress = o.raw["progress"] { trace.progress = try track(progress) }; n = trace
         case "grid": n = Designs.grid(width:w,height:h,spacing:try o.number("spacing",48),color:color)
+        case "warpgrid":
+            let grid = WarpGridNode(width:w,height:h,spacing:try o.number("spacing",60),center:try o.point("center",CGPoint(x:w/2,y:h/2)),name:name)
+            grid.color = color; grid.lineWidth = try o.number("strokeWidth",1); grid.strength = try o.number("strength",0.5)
+            grid.falloff = try o.number("falloff",300); grid.twist = try o.number("twist",0); grid.resolution = try o.number("resolution",12)
+            guard grid.falloff > 0, grid.resolution > 0 else { throw GraphicsError.invalid("warpgrid falloff and resolution must be positive") }; n = grid
         case "reticle": n = try Designs.reticle(radius:radius,color:color)
         case "flare": n = try Designs.flare(radius:radius,color:color)
         case "waveform":
@@ -153,18 +169,20 @@ public final class SceneDocument {
             if let key = o.raw["wordsData"] as? String { guard let value = data[key] else { throw GraphicsError.invalid("Missing wordsData: \(key)") }; raw = value }
             else { raw = try o.array("words") }
             let cues = try JSONDecoder().decode([WordCue].self,from:JSONSerialization.data(withJSONObject:raw))
-            _ = try CueSheet(cues); n = KaraokeNode(words:cues,font:try o.string("font","HelveticaNeue"),size:try o.number("size",48))
+            _ = try CueSheet(cues); n = KaraokeNode(words:cues,font:try font(o),size:try o.number("size",48))
         default: throw GraphicsError.invalid("Unknown node type: \(type)")
         }
         n.position = CGPoint(x:try o.number("x",0),y:try o.number("y",0)); n.rotation = try o.number("rotation",0)
         let scale = try o.number("scale",1); n.scale = CGPoint(x:try o.number("scaleX",scale),y:try o.number("scaleY",scale)); n.anchor = try o.point("anchor",.zero)
         n.opacity = try o.number("opacity",1); n.start = try o.number("start",0); n.end = try o.number("end",.infinity)
-        guard n.end >= n.start else { throw GraphicsError.invalid("Node end precedes start") }
+        guard n.end >= n.start else { throw GraphicsError.invalid("Node end precedes start: \(type)\(name.isEmpty ? "" : " \(name)") start \(n.start) end \(n.end)") }
         let blend = try o.string("blend","normal")
         let modes: [String:CGBlendMode] = ["normal":.normal,"screen":.screen,"add":.plusLighter,"multiply":.multiply,"overlay":.overlay,"difference":.difference,"exclusion":.exclusion,"lighten":.lighten,"darken":.darken,"erase":.destinationOut]
         guard let mode = modes[blend] else { throw GraphicsError.invalid("Unknown blend \(blend)") }; if o.raw["blend"] != nil { n.blendMode = mode }
+        let animated = ["x","y","rotation","scaleX","scaleY","opacity"] + (n is ShapeNode ? ["trimStart","trimEnd","strokeWidth","dashPhase"] : n is WarpGridNode ? ["strength","twist","strokeWidth"] : [])
         for (key,value) in try o.object("tracks").raw {
-            guard ["x","y","rotation","scaleX","scaleY","opacity"].contains(key) else { throw GraphicsError.invalid("Unknown animated property \(key)") }; n.tracks[key] = try track(value)
+            guard animated.contains(key) else { throw GraphicsError.invalid("Unknown animated property \(key) for \(type)") }
+            do { n.tracks[key] = try track(value) } catch { throw GraphicsError.invalid("\(type)\(name.isEmpty ? "" : " \(name)") track \(key): \(error)") }
         }
         if o.raw["clip"] != nil { let r = try o.numbers("clip"); guard r.count == 4 else { throw GraphicsError.invalid("Clip is [x,y,width,height]") }; n.clip = .rect(CGRect(x:r[0],y:r[1],width:r[2],height:r[3])) }
         if let kind = o.raw["entrance"] as? String { guard ["pop","slap","slam"].contains(kind) else { throw GraphicsError.invalid("Unknown entrance") }; try Designs.entrance(n,start:n.start,kind:kind) }

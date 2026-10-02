@@ -28,7 +28,9 @@ module Toolkit
       "anim:prepare" => "Prepare local overlay cues from optional full-song [words.json], without Fal",
       "audio:analyze" => "Decode and analyze song beats/energy: [audio,out_dir] (local)",
       "audio:transcribe" => "Word timestamps with Fal Whisper: [audio,out.json] (paid)",
+      "audio:transcribe_local" => "Local mlx-whisper word timestamps: [audio,out.json,from,seconds] (Apple Silicon, uv; free)",
       "media:stems" => "Fal Demucs: [audio,out_dir,vocals,...] (paid)",
+      "media:stems_local" => "Local Demucs vocals: [audio,out_dir,from,seconds] (uv; free, full-song aligned)",
       "media:probe" => "Probe [path]",
       "media:sheet" => "Contact sheet [video,out.jpg]",
       "media:frames" => "Dense reference analysis [video,out_dir,fps,width]",
@@ -40,9 +42,10 @@ module Toolkit
       "media:keep_component" => "Keep seeded alpha silhouette [source_dir,out_dir,seed_x,seed_y] (Python)",
       "media:sprite_box" => "Detect sprite bounds [source,green|paper] (Python)",
       "media:split_row" => "Split a character sheet [source,out_prefix,x1,x2,...] (Python)",
-        "media:track" => "Track template [video,out.json,x,y,size,search,from_frame]",
-        "media:audio_cut" => "Cut audio [source,out.wav,start,seconds]",
-        "media:style" => "Style analysis [image,...] (Python)",
+      "media:track" => "Track template [video,out.json,x,y,size,search,from_frame]",
+      "media:audio_cut" => "Cut audio [source,out.wav,start,seconds]",
+      "media:style" => "Style analysis [image,...] (Python)",
+      "media:montage" => "Labeled review sheet of images [out.jpg,columns,width,img1,img2,...] (local)",
       "media:concat" => "Concatenate unrelated clips [out.mp4,a.mp4,b.mp4,...]",
       "media:mux" => "Replace audio [video,audio,out.mp4]",
       "media:preview" => "Join contiguous sections with unbroken song [out.mp4,s01,s02,...]",
@@ -103,10 +106,14 @@ module Toolkit
       when "audio:transcribe"
         required(a, 2); c = Fal::Client.new; result = Fal::Models::Whisper.new(client: c).transcribe(audio_url: c.upload(a[0]), chunk_level: "word")
         FileUtils.mkdir_p(File.dirname(a[1])); File.write(a[1], JSON.pretty_generate(result.output)); emit(path: a[1], request_id: result.request_id)
+      when "audio:transcribe_local"
+        required(a, 2); result = py.transcribe_local(a[0], from: Float(a[2] || 0), seconds: Float(a[3] || 0))
+        FileUtils.mkdir_p(File.dirname(a[1])); File.write(a[1], JSON.pretty_generate(result)); emit(path: a[1], words: result["chunks"].size, text: result["text"])
       when "media:stems"
         required(a, 2); c = Fal::Client.new; stems = a.drop(2); stems = %w[vocals] if stems.empty?
         result = Fal::Models::Demucs.new(client: c).separate(audio_url: c.upload(a[0]), stems: stems)
         FileUtils.mkdir_p(a[1]); emit stems.map { |s| c.download(result.output.fetch(s).fetch("url"), File.join(a[1], "#{s}.wav")) }
+      when "media:stems_local" then required(a, 2); emit py.stems_local(a[0], a[1], from: Float(a[2] || 0), seconds: Float(a[3] || 0))
       when "media:probe" then required(a, 1); emit ff.summary(a[0])
       when "media:sheet" then required(a, 2); emit ff.contact_sheet(*a)
       when "media:frames" then required(a, 2); emit ff.extract_frames(a[0], a[1], fps: Float(a[2] || 12), width: Integer(a[3] || 480))
@@ -114,17 +121,20 @@ module Toolkit
       when "media:cut"
         required(a, 4); ff.run("ffmpeg", "-y", "-v", "error", "-ss", a[2], "-i", a[0], "-t", a[3], "-c:v", "libx264", "-c:a", "aac", a[1]); emit(path: a[1])
       when "media:cuts"
-        required(a, 2); result = py.call("cuts.py", a[0]); File.write(a[1], JSON.pretty_generate(result)); emit(path: a[1], cuts: result["cuts"])
+        required(a, 2); result = py.call("cuts.py", a[0]); FileUtils.mkdir_p(File.dirname(a[1])); File.write(a[1], JSON.pretty_generate(result)); emit(path: a[1], cuts: result["cuts"])
       when "media:mouth"
         required(a, 7); result = py.run(py.executable, File.join(Media::Python::SCRIPTS, "mouth_sync.py"), *a); emit JSON.parse(result.lines.last)
       when "media:cutout" then required(a, 3); emit py.cutout(*a)
       when "media:keep_component" then required(a, 4); emit Media::SpriteComponents.new.keep(*a)
       when "media:sprite_box" then required(a, 2); emit py.call("sprite_box.py", *a)
       when "media:split_row" then required(a, 3); emit(summary: py.run(py.executable, File.join(Media::Python::SCRIPTS, "split_row.py"), *a))
-        when "media:track"
-          required(a, 5); result = py.track_template(a[0], Integer(a[2]), Integer(a[3]), Integer(a[4]), Integer(a[5] || a[4]), Integer(a[6] || 0)); File.write(a[1], JSON.pretty_generate(result)); emit(path: a[1])
-        when "media:audio_cut" then required(a, 4); emit ff.extract_audio(a[0], a[1], from: Float(a[2]), seconds: Float(a[3]))
-        when "media:style" then required(a, 1); emit py.style_split(*a)
+      when "media:track"
+        required(a, 5); result = py.track_template(a[0], Integer(a[2]), Integer(a[3]), Integer(a[4]), Integer(a[5] || a[4]), Integer(a[6] || 0)); FileUtils.mkdir_p(File.dirname(a[1])); File.write(a[1], JSON.pretty_generate(result)); emit(path: a[1])
+      when "media:audio_cut" then required(a, 4); emit ff.extract_audio(a[0], a[1], from: Float(a[2]), seconds: Float(a[3]))
+      when "media:style" then required(a, 1); emit py.style_split(*a)
+      when "media:montage"
+        required(a, 4); cols = Integer(a[1]); imgs = a.drop(3); FileUtils.mkdir_p(File.dirname(a[0]))
+        emit Media::ImageMagick.new.board(imgs.map { |i| [i, File.basename(i, ".*")] }, a[0], tile: "#{cols}x", width: Integer(a[2]))
       when "media:concat" then required(a, 2); emit ff.concat_videos(a.drop(1), a[0])
       when "media:mux" then required(a, 3); emit ff.mux(*a, shortest: false)
       when "media:preview" then required(a, 2); emit preview(a[0], a.drop(1))
