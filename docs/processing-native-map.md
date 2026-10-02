@@ -14,7 +14,7 @@ The extension modules are small creative helpers, not another renderer. Text, pa
 
 ## Implemented primitive map
 
-The drawing interfaces below live in [MotionGraphics](../.claude/skills/motion-graphics-music-video/scripts/tools/graphics). “Native” describes implementation, not guaranteed speed. These are corresponding operations, with documented native coordinate/style conventions rather than identical argument signatures.
+The drawing interfaces below live in [MotionGraphics](../.claude/skills/motion-graphics-music-video-noimage/scripts/tools/graphics). “Native” describes implementation, not guaranteed speed. These are corresponding operations, with documented native coordinate/style conventions rather than identical argument signatures.
 
 | Primitive | Swift implementation | Scene JSON |
 | --- | --- | --- |
@@ -129,10 +129,10 @@ Apple M4, macOS 26.6.2, release build, p5 2.3.3. Matched 500 circles with a rota
 | Native Swift → PNG | 1.042, 1.247, 1.387 | 1.247 s | 38.5 fps |
 | Existing p5/Chrome → PNG | 3.622, 3.188, 2.318 | 3.188 s | 15.1 fps |
 
-Native was **2.56× faster** on this workload. Run-order/cache effects and PNG compression matter; this is a local measurement, not a guaranteed speedup. Reproducible fixtures: [native JSON](../.claude/skills/motion-graphics-music-video/scripts/tools/graphics/examples/benchmark.json) (the matching browser fixture was removed with its backend after measurement). The full futuristic example (grid, HUD rings, typography, paths, flare and bloom) exported 192 1080p H.264 frames in 4.910 s after initialization (39.1 fps); ffprobe verified exactly 192 frames and 8.000 s. No comparison to an equivalent p5 version of that scene was performed.
+Native was **2.56× faster** on this workload. Run-order/cache effects and PNG compression matter; this is a local measurement, not a guaranteed speedup. Reproducible fixtures: [native JSON](../.claude/skills/motion-graphics-music-video-noimage/scripts/tools/graphics/examples/benchmark.json) (the matching browser fixture was removed with its backend after measurement). The full futuristic example (grid, HUD rings, typography, paths, flare and bloom) exported 192 1080p H.264 frames in 4.910 s after initialization (39.1 fps); ffprobe verified exactly 192 frames and 8.000 s. No comparison to an equivalent p5 version of that scene was performed.
 
 ## Using it in production
 
-See the [toolkit guide](../.claude/skills/motion-graphics-music-video/scripts/tools/graphics/README.md) for build commands, complete JSON field reference, Swift subclassing, codec/alpha rules and examples. Prefer the direct movie path for finished videos and transparent ProRes for editing applications. Use PNG sequences only for explicit external interchange or review; the default overlay/VFX pipeline does not need them. The default overlay and VFX movie paths stream audio and picture through the same native writer. Only explicit PNG exports/review stills create frame images. There is no browser fallback or JavaScript source conversion.
+See the [toolkit guide](../.claude/skills/motion-graphics-music-video-noimage/scripts/tools/graphics/README.md) for build commands, complete JSON field reference, Swift subclassing, codec/alpha rules and examples. Prefer the direct movie path for finished videos and transparent ProRes for editing applications. Use PNG sequences only for explicit external interchange or review; the default overlay/VFX pipeline does not need them. The default overlay and VFX movie paths stream audio and picture through the same native writer. Only explicit PNG exports/review stills create frame images. There is no browser fallback or JavaScript source conversion.
 
 Validation after migration: 51 offline Ruby examples and all 21 Swift graphics tests pass on this host. This includes Metal particles/compute/3D, alpha export, decoded frame counts, color round trips, PCM trimming, AAC passthrough/EOF, native VFX clips/stills and a still-image overlay with no intermediate movie or frame directory. Paid live generation was not run.

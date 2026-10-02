@@ -1,5 +1,5 @@
 {
-  "name": "motion-graphics-music-video",
+  "name": "motion-graphics-music-video-noimage",
   "version": "0.2.0",
   "license": "MIT",
   "description": "Create music videos on macOS with native Swift motion graphics, beat mapping, procedural sound effects and Swift VFX.",
@@ -29,10 +29,10 @@
     }
   },
   "mcpServers": {
-    "music-video": {
+    "music-video-noimage": {
       "command": "ruby",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/.claude/skills/motion-graphics-music-video/scripts/mcp.rb"
+        "${CLAUDE_PLUGIN_ROOT}/.claude/skills/motion-graphics-music-video-noimage/scripts/mcp.rb"
       ],
       "env": {
         "FAL_AI_API_KEY_PLUGIN": "${user_config.FAL_AI_API_KEY}"

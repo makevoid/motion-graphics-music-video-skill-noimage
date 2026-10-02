@@ -4,7 +4,7 @@ The native music-video workflow needs no Fal key. Keep the supplied song, local 
 
 ## Plugin sessions
 
-Configure the plugin's optional **Fal API key** with `/plugin configure motion-graphics-music-video`. The sensitive `FAL_AI_API_KEY` option is passed only to the bundled `music-video` MCP server. Never ask the user to paste it into chat or read credential files. The server can start without a key; `credential_status` reports whether one is configured without revealing it.
+Configure the plugin's optional **Fal API key** with `/plugin configure motion-graphics-music-video-noimage`. The sensitive `FAL_AI_API_KEY` option is passed only to the bundled `music-video-noimage` MCP server. Never ask the user to paste it into chat or read credential files. The server can start without a key; `credential_status` reports whether one is configured without revealing it.
 
 Initialize the project, install dependencies, write the plan and record approval through the Ruby CLI. Use the server's `run_task` for requested audio tasks and poll `task_status` until complete. Its task allowlist contains audio processing/generation, audio uploads and the audio/composition pipeline; it exposes no image/video generation commands.
 

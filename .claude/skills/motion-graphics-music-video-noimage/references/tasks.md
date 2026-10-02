@@ -3,7 +3,7 @@
 ## Directory layers
 
 ```text
-motion-graphics-music-video/
+motion-graphics-music-video-noimage/
   SKILL.md
   references/                    agent instructions
   assets/plan-template.md        planning document template
@@ -91,7 +91,7 @@ ruby scripts/mv.rb --project /absolute/project 'audio:transcribe[audio/song.wav,
 ruby scripts/mv.rb --project /absolute/project 'media:stems[audio/song.wav,audio/stems,vocals]'
 ```
 
-In plugin sessions, run the paid tasks via the `music-video` MCP server. Schema inspection stays in the Ruby CLI. The schemas cover only Music3, Stable Audio SFX, Whisper and Demucs.
+In plugin sessions, run the paid tasks via the `music-video-noimage` MCP server. Schema inspection stays in the Ruby CLI. The schemas cover only Music3, Stable Audio SFX, Whisper and Demucs.
 
 For Music3, `config/generations.rb` returns a Hash evaluated inside `Pipeline`:
 

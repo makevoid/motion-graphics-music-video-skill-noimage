@@ -1,4 +1,4 @@
-# Motion graphics music video — native Mac edition
+# Motion graphics music video noimage — native Mac edition
 
 A Claude Code skill and plugin for creating music videos from a song and a creative prompt, built specifically for **macOS**. This repository is a fork of [makevoid/motion-graphics-music-video-skill](https://github.com/makevoid/motion-graphics-music-video-skill).
 
@@ -8,11 +8,11 @@ This is the **no-image-generation fork**. It builds motion graphics from code an
 
 ### NOTE
 
-Please follow the README on the [original repo](https://github.com/makevoid/motion-graphics-music-video-skill) adding `-noimage` at the end of the commands. This readme is not yet up to date.
+Use the installation commands below for this fork. Its plugin, marketplace, skill and MCP server names use the `-noimage` suffix so they can coexist with the original plugin.
 
 This plugin has been tested few times and consistently seems to produce great results without the downside of spending for FAL AI credits for MiniMax H3. This plugin draws/generate everything with local Swift tools, it's super fast and you can get great results with little iterations and render time.
 
-[Skill instructions](.claude/skills/motion-graphics-music-video/SKILL.md) · [Native workflow](.claude/skills/motion-graphics-music-video/references/native-workflow.md) · [Task reference](.claude/skills/motion-graphics-music-video/references/tasks.md) · [Testing](.claude/skills/motion-graphics-music-video/references/testing.md)
+[Skill instructions](.claude/skills/motion-graphics-music-video-noimage/SKILL.md) · [Native workflow](.claude/skills/motion-graphics-music-video-noimage/references/native-workflow.md) · [Task reference](.claude/skills/motion-graphics-music-video-noimage/references/tasks.md) · [Testing](.claude/skills/motion-graphics-music-video-noimage/references/testing.md)
 
 ## Video made with this skill
 
@@ -41,13 +41,13 @@ Install this fork from your terminal:
 
 ```sh
 claude plugin marketplace add makevoid/motion-graphics-music-video-skill-noimage
-claude plugin install motion-graphics-music-video@makevoid-music-video --scope user
+claude plugin install motion-graphics-music-video-noimage@makevoid-music-video-noimage --scope user
 ```
 
 Start a Claude Code session with access to a working folder, then invoke:
 
 ```text
-/motion-graphics-music-video:motion-graphics-music-video
+/motion-graphics-music-video-noimage:motion-graphics-music-video-noimage
 ```
 
 Supply a song attachment or local path and a creative prompt. Optional inputs include lyrics, reference images or videos, an excerpt range, aspect ratio and intended audience. For example:
@@ -66,7 +66,7 @@ Videos and review artifacts are written to the project's `output/` directory. Sc
 
 Fal is retained for audio tasks that may be useful in later projects: MiniMax Music3 music generation, Stable Audio SFX, Whisper transcription and Demucs stem separation. The skill uses these only when explicitly requested; local analysis and Swift sound synthesis remain the defaults.
 
-For plugin audio tasks, configure the optional key with `/plugin configure motion-graphics-music-video`. The sensitive **Fal API key** option is passed to the bundled `music-video` MCP server. Standalone developer use can supply `FAL_AI_API_KEY` through the environment. See the [credential guide](.claude/skills/motion-graphics-music-video/references/credentials.md) and [audio task recipes](.claude/skills/motion-graphics-music-video/references/tasks.md#optional-fal-audio). Image and video model adapters are not included.
+For plugin audio tasks, configure the optional key with `/plugin configure motion-graphics-music-video-noimage`. The sensitive **Fal API key** option is passed to the bundled `music-video-noimage` MCP server. Standalone developer use can supply `FAL_AI_API_KEY` through the environment. See the [credential guide](.claude/skills/motion-graphics-music-video-noimage/references/credentials.md) and [audio task recipes](.claude/skills/motion-graphics-music-video-noimage/references/tasks.md#optional-fal-audio). Image and video model adapters are not included.
 
 ## Local development
 
@@ -79,10 +79,10 @@ claude --plugin-dir .
 From the repository root:
 
 ```sh
-ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb --help
-ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb -T
-ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb setup
-ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb test
+ruby .claude/skills/motion-graphics-music-video-noimage/scripts/mv.rb --help
+ruby .claude/skills/motion-graphics-music-video-noimage/scripts/mv.rb -T
+ruby .claude/skills/motion-graphics-music-video-noimage/scripts/mv.rb setup
+ruby .claude/skills/motion-graphics-music-video-noimage/scripts/mv.rb test
 ```
 
 `rake test` delegates to the same Ruby entry point. `PROFILE=core` checks the CLI, project initialization and workflow contracts; `PROFILE=media` and `PROFILE=swift` exercise local media and native rendering. The complete suite requires the macOS dependencies above. Fal audio behavior is tested with mocked responses; routine tests make no paid calls.
@@ -90,8 +90,8 @@ ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb test
 For video production, initialize a project outside the plugin installation and use `--project`:
 
 ```sh
-ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb init --project /absolute/video-project --song /absolute/song.mp3 --prompt-file /absolute/brief.md
-ruby .claude/skills/motion-graphics-music-video/scripts/mv.rb --project /absolute/video-project setup
+ruby .claude/skills/motion-graphics-music-video-noimage/scripts/mv.rb init --project /absolute/video-project --song /absolute/song.mp3 --prompt-file /absolute/brief.md
+ruby .claude/skills/motion-graphics-music-video-noimage/scripts/mv.rb --project /absolute/video-project setup
 ```
 
 The project contains its own copy of the runtime. Existing projects retain the version they were initialized with; installing this fork does not remove image/video adapters from older projects. Start a fresh project to use this version.

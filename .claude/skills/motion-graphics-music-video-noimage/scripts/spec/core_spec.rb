@@ -3,7 +3,7 @@ RSpec.describe "Skill contracts and Ruby entry", :core do
   it "loads valid metadata and resolves every bundled Markdown reference" do
     skill = File.read(File.join(SKILL, "SKILL.md"))
     front = YAML.safe_load(skill.split("---", 3)[1])
-    expect(front.fetch("name")).to eq("motion-graphics-music-video")
+    expect(front.fetch("name")).to eq("motion-graphics-music-video-noimage")
     expect(front.fetch("description").length).to be > 30
     Dir[File.join(SKILL, "**", "*.md")].reject { |p| p.include?("node_modules") || p.include?("/tmp/") }.each do |path|
       File.read(path).scan(/\[[^\]]*\]\(([^)]+)\)/).flatten.each do |target|

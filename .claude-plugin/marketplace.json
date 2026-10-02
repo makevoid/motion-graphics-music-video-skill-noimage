@@ -1,5 +1,5 @@
 {
-  "name": "makevoid-music-video",
+  "name": "makevoid-music-video-noimage",
   "description": "Native macOS motion graphics music video plugin by makevoid.",
   "owner": {
     "name": "makevoid",
@@ -7,7 +7,7 @@
   },
   "plugins": [
     {
-      "name": "motion-graphics-music-video",
+      "name": "motion-graphics-music-video-noimage",
       "source": "./",
       "description": "Create music videos on macOS with native Swift graphics, local audio analysis and procedural SFX/VFX."
     }

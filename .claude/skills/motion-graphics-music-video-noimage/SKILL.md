@@ -1,10 +1,10 @@
 ---
-name: motion-graphics-music-video
+name: motion-graphics-music-video-noimage
 description: Create and revise beat-synced motion-graphics music videos from a supplied song and creative prompt, drawn entirely with the bundled native Swift renderer (vector line art, type, Metal shaders, neon glow), with music mapping, researched storyboards, procedural Swift SFX and Swift VFX. Use for full music videos or revisions to their scenes, animation, sound and effects.
 license: MIT
 ---
 
-# Motion graphics music video
+# Motion graphics music video noimage
 
 Create a hyper quality, visually interesting, potentially very fun and viral music video. The default is purposeful, chaotic animation: surprising details, visual jokes, varied scale, rhythmic camera changes and callbacks that keep the viewer hooked, every hit landing on the music. Preserve a readable focal subject and use brief pauses to make peaks land. A quieter user brief overrides this default. Viral success is an ambition, never a promise.
 
@@ -78,4 +78,4 @@ Run appropriate RSpec profiles from [testing.md](references/testing.md) after mo
 
 Fal support remains available for **explicitly requested audio work**: Music3, Stable Audio SFX, Whisper transcription and Demucs stems. These tools are not part of the default video build. Keep the supplied song, local analysis and Swift SoundSynth unless the user asks for an audio service. MiniMax Music3 is an audio adapter; the MiniMax H3 video adapter is removed.
 
-For requested Fal audio tasks, read [credentials.md](references/credentials.md) and the optional audio recipes in [tasks.md](references/tasks.md). Include the requested calls and retry allowance in the plan, preserve existing authorization, and record approval before paid work. Plugin audio tasks use the `music-video` MCP server so credentials stay out of chat. Image and video generation are unsupported.
+For requested Fal audio tasks, read [credentials.md](references/credentials.md) and the optional audio recipes in [tasks.md](references/tasks.md). Include the requested calls and retry allowance in the plan, preserve existing authorization, and record approval before paid work. Plugin audio tasks use the `music-video-noimage` MCP server so credentials stay out of chat. Image and video generation are unsupported.
