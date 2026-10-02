@@ -1,9 +1,11 @@
 require "json"
 require "yaml"
+require "etc"
 require_relative "shell"
 require_relative "anim"
 require_relative "ffmpeg"
 require_relative "python"
+require_relative "graphics"
 
 module Media
   # Native Swift VFX: decode, light layers, effects, audio and encode in memory.
@@ -70,10 +72,38 @@ module Media
       path("clip_#{from}_#{to}.mp4")
     end
 
-    # The whole video -> config `out` (the source's audio stream copied).
-    def render
+    # The whole video -> config `out` (the source's audio stream copied). jobs > 1 renders that many chunks in parallel mvfx
+    # processes (each seeks to its start; echo ghosts are decoded from just before it), joins the pictures by stream copy and
+    # copies the source's audio track whole, so chunk edges never touch the sound.
+    def render(jobs: Integer(ENV["JOBS"] || [Etc.nprocessors - 2, 1].max.clamp(1, 8)))
       cues
-      mvfx("--out", out, *bitrate)
+      ensure_built # once, before any parallel chunk could start a build
+      raise CommandError, "Output already exists: #{out}" if File.exist?(out)
+      total = (FFmpeg.new.duration(source) * 24).round # cue-grid frames
+      chunks = [jobs, total / 24].min
+      return (mvfx("--out", out, *bitrate) && out) if chunks <= 1
+      parts = "#{out}.parts"
+      FileUtils.rm_rf(parts)
+      FileUtils.mkdir_p(parts)
+      bounds = (0..chunks).map { |i| total * i / chunks }
+      threads = bounds.each_cons(2).with_index.map do |(from, to), i|
+        file = File.join(parts, format("%03d.mp4", i))
+        thread = Thread.new { mvfx("--out", file, "--from", from, "--to", to, "--no-audio", *bitrate, quiet: true) }
+        thread.report_on_exception = false
+        [file, thread]
+      end
+      errors = threads.filter_map do |_, thread|
+        thread.value
+        nil
+      rescue CommandError => e
+        e
+      end
+      raise errors.first if errors.any?
+      list = File.join(parts, "list.txt")
+      File.write(list, threads.map { |f, _| "file '#{f}'\n" }.join)
+      run("ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", list, "-i", source,
+          "-map", "0:v:0", "-map", "1:a:0?", "-c", "copy", out)
+      FileUtils.rm_rf(parts)
       out
     end
 
@@ -85,14 +115,18 @@ module Media
     # cues.yml `bitrate:` (bits/s, e.g. 15_000_000) for the encode; default scales with size and frame rate.
     def bitrate = config["bitrate"] ? ["--bitrate", Integer(config["bitrate"])] : []
 
-    def mvfx(*args)
+    def ensure_built
       dependencies = Dir[File.join(PACKAGE, "Sources", "**", "*.swift")] + Dir[File.join(Graphics::PACKAGE, "Sources", "**", "*.swift")] + [File.join(PACKAGE, "Package.swift"), File.join(Graphics::PACKAGE, "Package.swift")]
       build if !File.exist?(BIN) || dependencies.any? { |f| File.mtime(f) > File.mtime(BIN) }
+    end
+
+    def mvfx(*args, quiet: false)
+      ensure_built
       if config["lights"]
         raise ArgumentError, "lights must be a native .json scene" unless File.extname(config["lights"]) == ".json"
         args += ["--lights-scene", File.expand_path(config["lights"], ROOT)]
       end
-      JSON.parse(run(BIN, "--in", source, "--cues", path("cues.json"), *args.map(&:to_s)).lines.last)
+      JSON.parse(run(BIN, "--in", source, "--cues", path("cues.json"), *args.map(&:to_s), quiet: quiet).lines.last)
     end
   end
 end

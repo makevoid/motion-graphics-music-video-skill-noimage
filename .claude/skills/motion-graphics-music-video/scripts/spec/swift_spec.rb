@@ -97,7 +97,7 @@ RSpec.describe "Swift VFX end to end", :swift do
     dir = File.join(RT, "prompts", name); FileUtils.mkdir_p(dir)
     File.write(File.join(dir, "cues.yml"), YAML.dump({ "source" => source, "out" => file("shaded.mp4"),
       "cues" => [{ "fx" => "streaks", "f" => 0, "dur" => 12, "amt" => 2, "radius" => 0.5, "shape" => "span", "fade" => 1 },
-                 { "fx" => "shockwave", "f" => 24, "dur" => 12, "amt" => 1, "x" => 0.5, "y" => 0.5, "radius" => 0.3 },
+                 { "fx" => "shockwave", "f" => 24, "dur" => 12, "amt" => 3, "x" => 0.5, "y" => 0.5, "radius" => 0.3 },
                  { "fx" => "heat", "f" => 48, "dur" => 12, "amt" => 8, "shape" => "span", "fade" => 1 },
                  { "fx" => "lens", "f" => 60, "dur" => 8, "amt" => 0.3 }] }))
     Media::Vfx.new(name).render
@@ -112,7 +112,8 @@ RSpec.describe "Swift VFX end to end", :swift do
     block = luma.(file("s6.png"), 190, 50) - luma.(file("o6.png"), 190, 50)                # 40 px right of a 140 px block
     expect(bar).to be > 6                                                                    # the thin bar flares sideways ...
     expect(block).to be < bar / 3                                                           # ... a solid area barely does
-    [28, 52, 61].each { |frame| expect(diff.(frame)).to be > 0.002 }                       # ring, shimmer, lens all move pixels
+    expect(diff.(28)).to be > 0.0005                                                       # a thin ring: only where it crosses edges
+    [52, 61].each { |frame| expect(diff.(frame)).to be > 0.002 }                       # ring, shimmer, lens all move pixels
     expect(diff.(70)).to be < 0.004                                                         # after the cues: untouched
   end
 
@@ -125,7 +126,7 @@ RSpec.describe "Swift VFX end to end", :swift do
     File.write(File.join(dir, "cues.yml"), YAML.dump({ "source" => source, "out" => file("hfr_fx.mp4"), "bitrate" => 3_000_000,
       "cues" => [{ "fx" => "rgb", "f" => 0, "dur" => 12, "amt" => 0, "radius" => 8 },                        # cue frames 0-12 = 0.0-0.5 s
                  { "fx" => "bands", "f" => 24, "dur" => 12, "amt" => 1, "n" => 4, "size" => 0.2, "fade" => 1 }] })) # 1.0-1.5 s
-    Media::Vfx.new(name).render
+    Media::Vfx.new(name).render(jobs: 3)                                       # parallel chunks: 0-16, 16-32, 32-48 cue frames
     probe = ff.run("ffprobe", "-v", "error", "-select_streams", "v", "-count_frames", "-show_entries", "stream=nb_read_frames,r_frame_rate",
                    "-of", "csv=p=0", file("hfr_fx.mp4"), quiet: true)
     expect(probe.strip.split(",")).to eq(["60/1", "120"])

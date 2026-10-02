@@ -5,10 +5,11 @@ import MotionGraphics
 
 struct Options {
     var input = "", cues = "", out = "", lightsScene: String?, stills: String?
-    var only: [Int] = [], from = 0, to: Int?, bitrate: Int?
+    var only: [Int] = [], from = 0, to: Int?, bitrate: Int?, audio = true
     init(_ args: [String]) throws {
         var it = args.makeIterator()
         while let key = it.next() {
+            if key == "--no-audio" { audio = false; continue } // picture-only chunk (parallel renders copy the audio once)
             guard let value = it.next() else { throw GraphicsError.invalid("Missing value for \(key)") }
             func integer() throws -> Int { guard let n = Int(value) else { throw GraphicsError.invalid("Invalid \(key)") }; return n }
             switch key {
@@ -43,7 +44,7 @@ struct Options {
         let fps = Double(nominal)
         guard fps.isFinite, fps >= 1, fps <= 240 else { throw GraphicsError.invalid("Unsupported input frame rate \(nominal)") }
         let toOut = { (cueFrame: Int) in Int((Double(cueFrame)*fps/24).rounded()) }
-        let source = try await VideoSource(url:url), total = Int((source.duration*fps).rounded())
+        let duration = try await AVURLAsset(url:url).load(.duration).seconds, total = Int((duration*fps).rounded())
         let first = toOut(opt.from), last = opt.to.map(toOut) ?? total
         guard first >= 0, last > first, last <= total else { throw GraphicsError.invalid("Invalid VFX frame interval") }
         let wanted = opt.stills == nil ? Array(first..<last) : opt.only.map(toOut)
@@ -62,12 +63,14 @@ struct Options {
         try FileManager.default.createDirectory(at:opt.stills == nil ? destination.deletingLastPathComponent() : destination,withIntermediateDirectories:true)
         let writer: VideoWriter?
         if opt.stills == nil {
-            let audio = try await AudioSource(url:url,start:Double(first)/fps,duration:Double(last-first)/fps)
+            let audio = opt.audio ? try await AudioSource(url:url,start:Double(first)/fps,duration:Double(last-first)/fps) : nil
             writer = try VideoWriter(url:destination,width:width,height:height,fps:fps,audio:audio,bitrate:opt.bitrate)
         } else { writer = nil }
         let start = ProcessInfo.processInfo.systemUptime
         // Decoded source frames an echo cue may read again: only as many as the longest echo reaches (each holds a decoder buffer).
         let reach = Int((Double(cues.filter { $0.fx == "echo" }.map { max(1,min($0.n ?? 4,12))*max(1,$0.hold ?? 1) }.max() ?? 0)*fps/24).rounded(.up))
+        // Seek: a chunk (--from) or a sparse still decodes from just before its first frame (and the echo ghosts behind it).
+        let source = try await VideoSource(url:url,start:max(0,Double(wanted.min()! - reach - 2)/fps))
         var recent: [Int:CIImage] = [:]
         for (index,frame) in wanted.enumerated() {
             let image: CIImage = try autoreleasepool {

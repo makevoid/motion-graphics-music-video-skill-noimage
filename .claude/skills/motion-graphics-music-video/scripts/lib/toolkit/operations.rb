@@ -64,7 +64,7 @@ module Toolkit
       "vfx:analyze" => "Analyze VFX source beats and cuts; VFX=name",
       "vfx:stills" => "Preview cued VFX frames [0,24,...]; VFX=name",
       "vfx:clip" => "Render VFX interval [from_frame,to_frame]; VFX=name",
-      "vfx:render" => "Render complete VFX version; VFX=name",
+      "vfx:render" => "Render complete VFX version; VFX=name, JOBS parallel chunks (default cores-2)",
       "sfx:gen" => "Generate/cache Fal SFX or local tones; SFX=name (paid for Fal)",
       "sfx:mix" => "Mix cued SFX against music (local); SFX=name",
       "history" => "List archived attempts [step]",

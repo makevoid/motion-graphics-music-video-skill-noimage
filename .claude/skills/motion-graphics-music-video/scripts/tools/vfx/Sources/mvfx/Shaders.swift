@@ -14,16 +14,16 @@ enum Shaders {
         if (gid.x >= dst.get_width() || gid.y >= dst.get_height()) return;
         float2 pos = float2(gid), c = p.b.xy;
         float pr = p.c.x, amt = p.a.w, diag = length(p.a.xy);
-        float ringR = pr * p.b.z * diag, band = max(16.0, 0.08 * p.a.y) * (0.6 + 0.9 * pr);
+        float ringR = pr * p.b.z * diag, band = max(12.0, 0.045 * p.a.y) * (0.6 + 0.9 * pr);
         float2 d = pos - c; float r = length(d); float2 dir = r > 0.0 ? d / r : float2(0.0);
         float x = (r - ringR) / band;
         float4 col = at(src, pos);
         if (fabs(x) < 1.0) {
-            float fade = (1.0 - pr) * amt, off = sin(x * M_PI_F) * fade * band * 0.5;
+            float fade = (1.0 - pr) * amt, off = sin(x * M_PI_F) * fade * band * 0.3;
             float4 g = at(src, pos - dir * off);
             col = float4(at(src, pos - dir * off * 1.25).r, g.g, at(src, pos - dir * off * 0.75).b, g.a);
             float edge = 1.0 - fabs(x);
-            col.rgb += 0.05 * fade * edge * edge * col.a + 0.03 * fade * edge * edge;
+            col.rgb *= 1.0 + 0.12 * fade * edge * edge;   // the ring catches light where there is light (black stays black)
         }
         dst.write(col, gid);
     }

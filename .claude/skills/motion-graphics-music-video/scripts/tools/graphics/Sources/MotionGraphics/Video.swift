@@ -9,7 +9,9 @@ public final class VideoSource {
     private var current: CMSampleBuffer?, next: CMSampleBuffer?
     private var previousTime = -Double.infinity
     public let duration: Double
-    public init(url: URL) async throws {
+    /// start: seconds to begin decoding at (the reader seeks to the keyframe before it), for rendering a later chunk without
+    /// decoding everything before it. Times passed to image(at:) stay absolute and must be >= start.
+    public init(url: URL, start: Double = 0) async throws {
         let asset = AVURLAsset(url:url)
         guard let track = try await asset.loadTracks(withMediaType:.video).first else { throw GraphicsError.invalid("Video has no picture track") }
         duration = try await asset.load(.duration).seconds; transform = try await track.load(.preferredTransform)
@@ -17,6 +19,7 @@ public final class VideoSource {
         output = AVAssetReaderTrackOutput(track:track,outputSettings:[kCVPixelBufferPixelFormatTypeKey as String:kCVPixelFormatType_32BGRA])
         output.alwaysCopiesSampleData = false
         guard reader.canAdd(output) else { throw GraphicsError.unavailable("Cannot attach video decoder") }; reader.add(output)
+        if start > 0 { reader.timeRange = CMTimeRange(start:CMTime(seconds:start,preferredTimescale:600000),duration:.positiveInfinity) }
         guard reader.startReading() else { throw reader.error ?? GraphicsError.io("Cannot start video decoder") }
         next = output.copyNextSampleBuffer()
     }
