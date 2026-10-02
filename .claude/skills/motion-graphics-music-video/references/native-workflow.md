@@ -194,7 +194,7 @@ VFX=finish-vfx mv --project P vfx:render                            # -> output/
   - `<name>_vN_60fps.mp4`: plain finish;
   - `<name>_vN_60fps_clean.mp4`: no SFX/VFX;
   - a contact sheet, plus `PLAN.md`/`RESEARCH.md`/`REVIEW.md`.
-- Use `media:twitter` or `media:youtube` for platform encodes.
+- Use `media:twitter` (any source to X spec: H.264 High, ≤ 60 fps, ≤ 25 Mb/s, AAC, faststart; see [tasks.md](tasks.md)) or `media:youtube` for platform encodes. Save them under new names next to the finals.
 
 ## Gotchas
 

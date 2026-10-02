@@ -205,8 +205,18 @@ VFX=finish-vfx ruby scripts/mv.rb --project /absolute/project vfx:analyze
 VFX=finish-vfx ruby scripts/mv.rb --project /absolute/project 'vfx:stills[0,24,120]'
 VFX=finish-vfx ruby scripts/mv.rb --project /absolute/project 'vfx:clip[96,144]'
 VFX=finish-vfx ruby scripts/mv.rb --project /absolute/project vfx:render
-ruby scripts/mv.rb --project /absolute/project 'media:twitter[output/finished.mp4,output/delivery-1080.mp4]'
+ruby scripts/mv.rb --project /absolute/project 'media:twitter[output/finished.mp4,output/finished_x.mp4]'
+ruby scripts/mv.rb --project /absolute/project 'media:faststart[output/finished.mp4,output/finished_fs.mp4]'
 ```
+
+**X/Twitter delivery.** `media:twitter[video,out.mp4]` encodes any source to X's upload spec:
+- MP4, H.264 High@4.2, yuv420p, progressive, square pixels, tagged BT.709 limited range (untagged/BT.601 sources are converted);
+- fits the 16:9 1920x1080, 9:16 1080x1920 or 1:1 1080x1080 box without upscaling; a source within 1% of the ratio (1928x1076 model clips) is fill-cropped to it; rotated phone video and anamorphic pixels are handled;
+- keeps the frame rate up to 60 (higher is capped), closed 1 s GOPs, faststart;
+- CRF 16 with a 24 Mb/s VBV cap (X's maximum is 25). Override with `CRF=`, `MAX_MBPS=` (≤ 25), `TUNE=animation|film|grain`;
+- AAC-LC stereo/mono at 44.1/48 kHz is copied, anything else becomes AAC-LC 48 kHz stereo 256 kb/s; metadata is stripped.
+
+It refuses to overwrite `out`, and prints the result with `mbps`, `fits_free` (≤ 140 s, ≤ 512 MB) and `fits_premium` (≤ 4 h, ≤ 16 GB on web/iOS; Android uploads stop at 10 min). A 1080p60 native render re-encodes transparently (deadstar: PSNR 50 dB, SSIM 0.997, ~3 min for 2 min on 8 cores). `media:faststart` is the lossless alternative when the master is already in spec and only needs its index moved to the front.
 
 `media:montage` tiles frames into a labelled contact strip (columns, tile width) for frame-exact sync review. `audio:transcribe_local` (mlx-whisper; `MV_WHISPER_MODEL`, `MV_WHISPER_LANG`) and `media:stems_local` (Demucs `htdemucs` on MPS; `MV_DEMUCS_MODEL`; writes vocals, no_vocals, drums, bass and other in one pass) are free local alternatives run through `uv`; their timestamps refer to the whole song. Sung or heavily processed vocals can still hallucinate words; verify by listening.
 
