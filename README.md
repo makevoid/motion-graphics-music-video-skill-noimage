@@ -14,9 +14,16 @@ This plugin has been tested few times and consistently seems to produce great re
 
 [Skill instructions](.claude/skills/motion-graphics-music-video-noimage/SKILL.md) · [Native workflow](.claude/skills/motion-graphics-music-video-noimage/references/native-workflow.md) · [Task reference](.claude/skills/motion-graphics-music-video-noimage/references/tasks.md) · [Testing](.claude/skills/motion-graphics-music-video-noimage/references/testing.md)
 
-## Video made with this skill
+## Videos created with this skill
 
-This is the skill that generated [the music video posted by @makevoid on X](https://x.com/makevoid/status/2106038781610451310).
+Three examples drawn entirely with the native Swift renderer — no image or video models. Click a thumbnail to watch on YouTube.
+
+| Dead Star | The Drop | LGM-1 |
+| :---: | :---: | :---: |
+| <a href="https://youtu.be/2Sw3KnEUA1w"><img src="docs/examples/dead-star.jpg" width="240" height="135" alt="Dead Star — Preview — @madebyanubis — Suno"></a> | <a href="https://youtu.be/f4qpElPt1kU"><img src="docs/examples/the-drop.jpg" width="240" height="135" alt="The Drop — generated with motion-graphics-music-video-skill-noimage"></a> | <a href="https://youtu.be/jBSBVTApLDY"><img src="docs/examples/lgm-1.jpg" width="240" height="135" alt="LGM-1 — generated with motion-graphics-music-video-skill-noimage"></a> |
+| @madebyanubis · Suno · 1:58 preview | 1:00 | 0:56 |
+
+This is also the skill that generated [the music video posted by @makevoid on X](https://x.com/makevoid/status/2106038781610451310).
 
 ## Requirements
 
