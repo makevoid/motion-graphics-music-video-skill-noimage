@@ -16,7 +16,17 @@ This plugin has been tested few times and consistently seems to produce great re
 
 ## Videos created with this skill
 
-Three examples drawn entirely with the native Swift renderer — no image or video models. Click a thumbnail to watch on YouTube.
+Nine examples drawn entirely with the native Swift renderer — no image or video models. Click a thumbnail to watch on YouTube.
+
+| Tamahagane | La Dame de Fer | Out Run |
+| :---: | :---: | :---: |
+| <a href="https://youtu.be/hHb8Gu9tRzU"><img src="docs/examples/tamahagane.jpg" width="240" height="135" alt="Tamahagane — generated with motion-graphics-music-video-skill-noimage"></a> | <a href="https://youtu.be/komOer1qUrI"><img src="docs/examples/la-dame-de-fer.jpg" width="240" height="135" alt="La Dame de Fer — generated with motion-graphics-music-video-skill-noimage"></a> | <a href="https://youtu.be/k94Ke_BWAW0"><img src="docs/examples/out-run.jpg" width="240" height="135" alt="Out Run — generated with motion-graphics-music-video-skill-noimage"></a> |
+| ElevenLabs Music v2.5 · 0:48 | ElevenLabs Music v2.5 · 0:45 | ElevenLabs Music v2.5 · 1:21 |
+
+| The Antwerp Job | Sideways | 3AM |
+| :---: | :---: | :---: |
+| <a href="https://youtu.be/YsLnhQM2dU0"><img src="docs/examples/the-antwerp-job.jpg" width="240" height="135" alt="The Antwerp Job — generated with motion-graphics-music-video-skill-noimage"></a> | <a href="https://youtu.be/r_vNIBrlzsA"><img src="docs/examples/sideways.jpg" width="240" height="135" alt="Sideways — generated with motion-graphics-music-video-skill-noimage"></a> | <a href="https://youtu.be/ecoT5Yz8iGA"><img src="docs/examples/3am.jpg" width="240" height="135" alt="3AM — generated with motion-graphics-music-video-skill-noimage"></a> |
+| ElevenLabs Music v2.5 · 0:49 | ElevenLabs Music v2.5 · 1:16 | 1:01 |
 
 | Dead Star | The Drop | LGM-1 |
 | :---: | :---: | :---: |
